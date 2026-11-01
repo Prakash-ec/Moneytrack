@@ -1,0 +1,41 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+        classpath 'com.google.gms:google-services:4.4.4'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+// The app applies org.jetbrains.kotlin.android (for .kt sources), so AGP 8.13
+// requires every library dependency to carry the androidJvm Kotlin platform
+// type. :capacitor-android is a pure-Java library; apply the same plugin to it
+// after it is configured so variant attributes match the app's debug variant.
+afterEvaluate {
+    def cap = project(':capacitor-android')
+    if (cap.plugins.hasPlugin('com.android.library') && !cap.plugins.hasPlugin('org.jetbrains.kotlin.android')) {
+        cap.plugins.apply('org.jetbrains.kotlin.android')
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

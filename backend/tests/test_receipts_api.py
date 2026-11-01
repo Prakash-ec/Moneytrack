@@ -1,0 +1,188 @@
+import io
+import pytest
+
+from app.services.ocr import BaseOCRProvider, set_ocr_provider
+from app.services.receipt_parser import AIReceiptParser, get_receipt_parser, set_receipt_parser
+
+
+class FakeGroqProvider:
+    def __init__(self, result=None, exc=None):
+        self.result = result
+        self.exc = exc
+
+    def is_available(self):
+        return self.result is not None
+
+    def analyze_receipt(self, image_bytes: bytes):
+        if self.exc is not None:
+            raise self.exc
+        return self.result or {}
+
+
+@pytest.fixture(autouse=True)
+def reset_receipt_parser():
+    yield
+    set_receipt_parser(AIReceiptParser())
+
+
+class MockOCRProvider(BaseOCRProvider):
+    def __init__(self, return_text: str = "") -> None:
+        self.return_text = return_text
+
+    def is_available(self) -> bool:
+        return True
+
+    def extract_text(self, image_bytes: bytes) -> str:
+        return self.return_text
+
+
+@pytest.fixture(autouse=True)
+def reset_ocr():
+    yield
+    set_ocr_provider(None)
+
+
+def test_parse_receipt_text_api(client, make_type):
+    make_type(name="Food", category="Food")
+    make_type(name="Stationary", category="Education")
+
+    payload = {
+        "text": (
+            "SARAVANA BHAVAN\n"
+            "Date: 23/10/2026\n"
+            "Dosa 80.00\n"
+            "Coffee 40.00\n"
+            "Total Amount: 120.00\n"
+            "UPI PhonePe"
+        )
+    }
+    resp = client.post("/api/receipts/parse", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["merchant"] == "SARAVANA BHAVAN"
+    assert data["amount_paise"] == 12000
+    assert data["expense_date"] == "2026-10-23"
+    assert data["payment_method"] == "UPI"
+    assert data["suggested_expense_type_name"] == "Food"
+    assert data["confidence"]["amount"] >= 0.85
+
+
+def test_parse_receipt_image_upload_api(client, make_type):
+    make_type(name="Bus Travel", category="Travel")
+
+    # Set mock OCR provider
+    mock_text = "BMTC BUS TICKET\nDate: 10/11/2026\nFare: 45.00\nTotal: 45.00\nCash"
+    set_ocr_provider(MockOCRProvider(mock_text))
+
+    # Construct a valid JPEG image header: \xff\xd8\xff...
+    fake_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00" + (b"\x00" * 100)
+
+    files = {"file": ("receipt.jpg", io.BytesIO(fake_jpeg), "image/jpeg")}
+    resp = client.post("/api/receipts/parse", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["amount_paise"] == 4500
+    assert data["suggested_expense_type_name"] == "Bus Travel"
+
+
+def test_parse_receipt_invalid_file_format(client):
+    fake_exe = b"MZ\x90\x00\x03\x00\x00\x00"
+    files = {"file": ("malicious.jpg", io.BytesIO(fake_exe), "image/jpeg")}
+    resp = client.post("/api/receipts/parse", files=files)
+    assert resp.status_code == 400
+    assert "Unsupported image format" in resp.json()["detail"]
+
+
+def test_parse_receipt_oversized_file(client):
+    large_bytes = b"\xff\xd8\xff" + (b"\x00" * (11 * 1024 * 1024))
+    files = {"file": ("huge.jpg", io.BytesIO(large_bytes), "image/jpeg")}
+    resp = client.post("/api/receipts/parse", files=files)
+    assert resp.status_code == 400
+    assert "exceeds the maximum allowed size" in resp.json()["detail"]
+
+
+def test_parse_receipt_missing_payload(client):
+    resp = client.post("/api/receipts/parse")
+    assert resp.status_code == 400
+    assert "Please provide an image file or receipt text" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Image upload through the API with Groq vision (mocked, no live key)
+# ---------------------------------------------------------------------------
+
+def _fake_jpeg():
+    return b"\xff\xd8\xff\xe0\x00\x10JFIF" + (b"\x00" * 100)
+
+
+def test_parse_receipt_image_upload_with_groq_success(client, make_type):
+    make_type(name="Bus Travel", category="Travel")
+
+    set_ocr_provider(MockOCRProviderApi("BMTC BUS TICKET\nDate: 10/11/2026\nFare: 12.00\nTotal: 12.00\nCash\n"))
+    set_receipt_parser(
+        AIReceiptParser(
+            groq_provider=FakeGroqProvider(
+                result={
+                    "merchant": "BMTC",
+                    "expense_date": "2026-11-10",
+                    "total_paise": 1200,
+                    "currency": "INR",
+                    "payment_method": "Cash",
+                    "suggested_category": "Travel",
+                    "confidence": {"amount": 0.95},
+                }
+            )
+        )
+    )
+
+    files = {"file": ("receipt.jpg", io.BytesIO(_fake_jpeg()), "image/jpeg")}
+    resp = client.post("/api/receipts/parse", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["amount_paise"] == 1200  # ₹12.00 from Groq, never 149600
+    assert data["merchant"] == "BMTC"
+    assert data["suggested_expense_type_name"] == "Bus Travel"
+
+
+def test_parse_receipt_image_upload_groq_unavailable_falls_back_to_ocr(client, make_type):
+    make_type(name="Bus Travel", category="Travel")
+
+    set_ocr_provider(MockOCRProviderApi("BMTC BUS TICKET\nDate: 10/11/2026\nFare: 45.00\nTotal: 45.00\nCash\n"))
+    # Default parser has no Groq key -> AI unavailable -> Tesseract fallback.
+    set_receipt_parser(AIReceiptParser())
+
+    files = {"file": ("receipt.jpg", io.BytesIO(_fake_jpeg()), "image/jpeg")}
+    resp = client.post("/api/receipts/parse", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["amount_paise"] == 4500
+
+
+def test_parse_receipt_image_upload_groq_error_falls_back_to_ocr(client, make_type):
+    make_type(name="Bus Travel", category="Travel")
+
+    set_ocr_provider(MockOCRProviderApi("BMTC BUS TICKET\nDate: 10/11/2026\nFare: 45.00\nTotal: 45.00\nCash\n"))
+    from app.services.groq_vision import GroqVisionError
+
+    set_receipt_parser(
+        AIReceiptParser(
+            groq_provider=FakeGroqProvider(result={}, exc=GroqVisionError("rate limited"))
+        )
+    )
+
+    files = {"file": ("receipt.jpg", io.BytesIO(_fake_jpeg()), "image/jpeg")}
+    resp = client.post("/api/receipts/parse", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["amount_paise"] == 4500  # Tesseract fallback
+
+
+class MockOCRProviderApi(BaseOCRProvider):
+    def __init__(self, return_text: str = "") -> None:
+        self.return_text = return_text
+
+    def is_available(self) -> bool:
+        return True
+
+    def extract_text(self, image_bytes: bytes) -> str:
+        return self.return_text

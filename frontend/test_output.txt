@@ -1,0 +1,68 @@
+
+> moneytrack-frontend@1.0.0 test
+> vitest run --run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.5 [39m[90mD:/MoneyTrack/frontend[39m
+
+ [31m❯[39m src/utils/currency.test.ts [2m([22m[2m0 test[22m[2m)[22m
+ [31m❯[39m src/utils/receipt.test.ts [2m([22m[2m0 test[22m[2m)[22m
+ [31m❯[39m src/services/api.test.ts [2m([22m[2m0 test[22m[2m)[22m
+ [31m❯[39m src/utils/periods.test.ts [2m([22m[2m0 test[22m[2m)[22m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Suites 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/services/api.test.ts[2m [ src/services/api.test.ts ][22m
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'config')[39m
+[36m [2m❯[22m src/services/api.test.ts:[2m14:1[22m[39m
+    [90m 12|[39m }
+    [90m 13|[39m
+    [90m 14|[39m describe('api.parseReceiptText', () => {
+    [90m   |[39m [31m^[39m
+    [90m 15|[39m   let originalFetch: typeof globalThis.fetch
+    [90m 16|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/utils/currency.test.ts[2m [ src/utils/currency.test.ts ][22m
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'config')[39m
+[36m [2m❯[22m src/utils/currency.test.ts:[2m12:1[22m[39m
+    [90m 10|[39m } from './currency'
+    [90m 11|[39m
+    [90m 12|[39m describe('parseRupeesToPaise', () => {
+    [90m   |[39m [31m^[39m
+    [90m 13|[39m   it('parses whole rupees, decimals, and grouped input', () => {
+    [90m 14|[39m     expect(parseRupeesToPaise('250')).toBe(25_000)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/utils/periods.test.ts[2m [ src/utils/periods.test.ts ][22m
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'config')[39m
+[36m [2m❯[22m src/utils/periods.test.ts:[2m13:1[22m[39m
+    [90m 11|[39m const today = '2026-10-22'
+    [90m 12|[39m
+    [90m 13|[39m describe('getPresetRange', () => {
+    [90m   |[39m [31m^[39m
+    [90m 14|[39m   it('builds today, yesterday, and week ranges', () => {
+    [90m 15|[39m     expect(getPresetRange('today', today)).toEqual({ start: today, end…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/utils/receipt.test.ts[2m [ src/utils/receipt.test.ts ][22m
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'config')[39m
+[36m [2m❯[22m src/utils/receipt.test.ts:[2m9:1[22m[39m
+    [90m  7|[39m } from './receipt'
+    [90m  8|[39m
+    [90m  9|[39m describe('validateReceiptFile', () => {
+    [90m   |[39m [31m^[39m
+    [90m 10|[39m   it('accepts valid JPEG, PNG, and WebP files under 10MB', () => {
+    [90m 11|[39m     expect(
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m4 failed[39m[22m[90m (4)[39m
+[2m      Tests [22m [2mno tests[22m
+[2m   Start at [22m 15:00:24
+[2m   Duration [22m 2.29s[2m (worker 98%, environment 2%)[22m
+

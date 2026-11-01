@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MoneyTrack">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B4F46"/>
+      <stop offset="1" stop-color="#12A187"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <path d="M17 24.5c0-2.5 2-4.5 4.5-4.5h20c2.5 0 4.5 2 4.5 4.5v4H17v-4Z" fill="#fff" opacity=".92"/>
+  <rect x="17" y="27.5" width="30" height="18" rx="5.5" fill="#fff"/>
+  <path d="M47 32.5v8" stroke="#0B4F46" stroke-width="2.4" stroke-linecap="round" opacity=".22"/>
+  <circle cx="40" cy="36.5" r="4.8" fill="#0D7C66"/>
+  <circle cx="40" cy="36.5" r="1.7" fill="#fff"/>
+  <path d="M23 36.5h7" stroke="#0B4F46" stroke-width="2.4" stroke-linecap="round" opacity=".24"/>
+</svg>
