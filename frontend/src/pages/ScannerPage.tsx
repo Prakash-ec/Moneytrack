@@ -119,6 +119,37 @@ export function ScannerPage() {
     setPreviewUrl(url)
   }
 
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    const validation = validateReceiptFile(file)
+    if (!validation.valid) {
+      setError(validation.error ?? 'Invalid file')
+      return
+    }
+    setError(null)
+    setImageBlob(file)
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+  }
+
   const capturePhoto = () => {
     if (!videoRef.current) return
     setCapturing(true)
@@ -271,7 +302,15 @@ export function ScannerPage() {
           </div>
         </div>
       ) : (
-        <section className="card upload-zone">
+        <section
+          className={cn(
+            'card upload-zone transition',
+            mode === 'upload' && isDragging && 'border-[var(--primary)] bg-[var(--primary-soft)] scale-[1.01]',
+          )}
+          onDragOver={mode === 'upload' ? handleDragOver : undefined}
+          onDragLeave={mode === 'upload' ? handleDragLeave : undefined}
+          onDrop={mode === 'upload' ? handleDrop : undefined}
+        >
           <span className="upload-icon">
             {mode === 'camera' ? (
               <Scan size={28} />

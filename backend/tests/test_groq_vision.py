@@ -168,6 +168,9 @@ def test_groq_normalizes_amount_to_paise():
     assert _normalize_amount(12) == 1200       # rupees -> paise
     assert _normalize_amount(12.00) == 1200
     assert _normalize_amount("12.00") == 1200
+    assert _normalize_amount("1250.50") == 125050
+    assert _normalize_amount(1250.50) == 125050
+    assert _normalize_amount("₹45.00") == 4500
     assert _normalize_amount(1200) == 1200     # already paise
     assert _normalize_amount(149600) == 149600  # large but plausible value is kept as paise
     assert _normalize_amount(None) is None
@@ -200,6 +203,9 @@ def test_groq_normalizes_amount_edge_cases():
     assert _normalize_amount(12) == 1200       # rupees -> paise
     assert _normalize_amount(12.00) == 1200
     assert _normalize_amount("12.00") == 1200
+    assert _normalize_amount("1250.50") == 125050
+    assert _normalize_amount(1250.50) == 125050
+    assert _normalize_amount("₹45.00") == 4500
     assert _normalize_amount(1200) == 1200     # already paise
     assert _normalize_amount(149600) == 149600  # large but plausible value kept as paise
     assert _normalize_amount(None) is None

@@ -209,8 +209,10 @@ def update_account(db: Session, account_id: int, payload: BankAccountUpdate) -> 
         return None
 
     data = payload.model_dump(exclude_unset=True)
+    valid_cols = {c.name for c in BankAccount.__table__.columns}
     for field, val in data.items():
-        setattr(account, field, val)
+        if field in valid_cols:
+            setattr(account, field, val)
 
     account.updated_at = datetime.now(timezone.utc)
     db.commit()

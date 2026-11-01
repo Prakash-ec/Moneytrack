@@ -73,12 +73,17 @@ async def parse_receipt(
                     raise HTTPException(
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
                     ) from exc
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Failed to parse receipt image. Please paste receipt text manually.",
+                    ) from exc
 
             ocr_provider = get_ocr_provider()
             if not ocr_provider.is_available():
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Local OCR engine (Tesseract) is not installed on this machine. "
+                    detail="Receipt scanning is currently unavailable on this server. "
                     "You can still paste receipt text manually or enter expenses directly.",
                 )
 

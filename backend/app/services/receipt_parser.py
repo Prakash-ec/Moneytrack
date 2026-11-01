@@ -1,3 +1,4 @@
+import logging
 import re
 from abc import ABC, abstractmethod
 from datetime import date
@@ -9,6 +10,8 @@ from app.schemas.receipt import ReceiptItem, ReceiptParseResponse
 from app.services.expense_types import name_key
 from app.services.groq_vision import GroqVisionError, GroqVisionProvider
 from app.services.type_classifier import TypeClassifier
+
+logger = logging.getLogger("moneytrack.receipt_parser")
 
 # ---------------------------------------------------------------------------
 # Category Keyword Dictionaries for Indian Receipts
@@ -661,21 +664,36 @@ def _ai_only_response(
     if not isinstance(confidence, dict):
         confidence = {}
 
+    items: list[ReceiptItem] = []
+    for it in ai.get("line_items", []):
+        if isinstance(it, dict) and it.get("name"):
+            items.append(
+                ReceiptItem(
+                    name=str(it["name"]).strip(),
+                    amount_paise=it.get("amount_paise"),
+                    quantity=it.get("quantity"),
+                )
+            )
+
+    note = "Scanned via Groq AI vision"
+    if ai.get("merchant"):
+        note = f"Scanned via Groq AI vision ({ai.get('merchant')})"
+
     ai_only = ReceiptParseResponse(
         merchant=ai.get("merchant"),
         amount_paise=total_paise,
         expense_date=expense_date,
         currency=ai.get("currency", "INR"),
-        subtotal_paise=None,
-        tax_paise=None,
+        subtotal_paise=ai.get("subtotal_paise"),
+        tax_paise=ai.get("tax_paise"),
         payment_method=ai.get("payment_method"),
-        items=[],
-        note="Scanned via Groq AI vision",
+        items=items,
+        note=note,
         suggested_expense_type_id=matched_type.id if matched_type else None,
         suggested_expense_type_name=matched_type.name if matched_type else None,
         confidence={k: float(v) for k, v in confidence.items() if v is not None},
         warnings=warnings,
-        raw_text=None,
+        raw_text=ai.get("raw_text"),
         scan_method="groq",
     )
     _apply_type_classification(ai_only, existing_types, category_hint=category)
@@ -686,9 +704,9 @@ class AIReceiptParser(BaseReceiptParser):
     """Receipt parser that augments local Tesseract OCR with optional Groq vision.
 
     Supports three scan modes:
-      - "ocr":   local Tesseract OCR only
+      - "ocr":   local Tesseract OCR only (falls back to Groq if OCR missing)
       - "groq":  Groq vision AI only (backend), falls back to OCR if unavailable
-      - "both":  OCR + Groq merged (default), best of both worlds
+      - "both":  Groq vision primary, OCR merged if available (default)
 
     The text path always delegates to the rule-based parser. Nothing is saved
     automatically; the user reviews before saving.
@@ -724,83 +742,122 @@ class AIReceiptParser(BaseReceiptParser):
         if mode not in {"ocr", "groq", "both"}:
             mode = "both"
 
+        ocr = get_ocr_provider()
+        has_ocr = ocr.is_available()
+        has_groq = self._groq.is_available()
+
+        if not has_ocr and not has_groq:
+            raise OCRUnavailableError(
+                "Receipt image analysis is currently unavailable on this server. "
+                "Please paste receipt text manually or enter expenses directly."
+            )
+
         # ------------------------------------------------------------------
         # OCR-only mode
         # ------------------------------------------------------------------
         if mode == "ocr":
-            ocr = get_ocr_provider()
-            if not ocr.is_available():
-                raise OCRUnavailableError(
-                    "Local Tesseract OCR engine was not found on this machine. "
-                    "Install Tesseract OCR or paste the receipt text manually."
-                )
-            extracted_text = ocr.extract_text(image_bytes)
-            return self._rule.parse(extracted_text, existing_types)
+            if has_ocr:
+                extracted_text = ocr.extract_text(image_bytes)
+                return self._rule.parse(extracted_text, existing_types)
+            if has_groq:
+                try:
+                    ai = self._groq.analyze_receipt(image_bytes)
+                    res = _ai_only_response(ai, existing_types)
+                    res.warnings = [
+                        "Local OCR engine is not installed on this server; processed using Groq AI vision."
+                    ] + list(res.warnings)
+                    return res
+                except GroqVisionError as exc:
+                    raise OCRUnavailableError(
+                        f"Local OCR is not installed and Groq Vision analysis failed: {exc}"
+                    ) from exc
+            raise OCRUnavailableError(
+                "Local OCR engine is not installed on this server. "
+                "Please paste receipt text manually or enter expenses directly."
+            )
 
         # ------------------------------------------------------------------
         # Groq-only mode
         # ------------------------------------------------------------------
         if mode == "groq":
-            if not self._groq.is_available():
-                # Fall back to OCR and disclose it.
-                ocr = get_ocr_provider()
-                if not ocr.is_available():
+            if has_groq:
+                try:
+                    ai = self._groq.analyze_receipt(image_bytes)
+                    return _ai_only_response(ai, existing_types)
+                except GroqVisionError as exc:
+                    logger.warning("Groq Vision failed in groq mode: %s", exc)
+                    if has_ocr:
+                        extracted_text = ocr.extract_text(image_bytes)
+                        res = self._rule.parse(extracted_text, existing_types)
+                        res.warnings = [
+                            f"Groq Vision unavailable ({exc}); fell back to local Tesseract OCR."
+                        ] + list(res.warnings)
+                        return res
                     raise OCRUnavailableError(
-                        "Groq is not configured and Tesseract OCR is not installed. "
-                        "Please configure GROQ_API_KEY or install Tesseract OCR."
-                    )
+                        f"Receipt analysis failed ({exc}). Please paste receipt text manually or enter expenses directly."
+                    ) from exc
+            if has_ocr:
                 extracted_text = ocr.extract_text(image_bytes)
-                result = self._rule.parse(extracted_text, existing_types)
-                result.warnings = [
-                    "Groq is unavailable; fell back to local Tesseract OCR."
-                ] + list(result.warnings)
-                return result
-            try:
-                ai = self._groq.analyze_receipt(image_bytes)
-            except GroqVisionError as exc:
-                # Groq timed out / rate-limited / bad response -> fall back to OCR.
-                ocr = get_ocr_provider()
-                if not ocr.is_available():
-                    raise OCRUnavailableError(
-                        f"Groq failed ({exc}) and Tesseract OCR is not installed."
-                    )
-                extracted_text = ocr.extract_text(image_bytes)
-                result = self._rule.parse(extracted_text, existing_types)
-                result.warnings = [
-                    f"Groq unavailable ({exc}); fell back to local Tesseract OCR."
-                ] + list(result.warnings)
-                return result
-            return _ai_only_response(ai, existing_types)
-
-        # ------------------------------------------------------------------
-        # Both mode: OCR + Groq merged
-        # ------------------------------------------------------------------
-        ocr = get_ocr_provider()
-        if not ocr.is_available():
+                res = self._rule.parse(extracted_text, existing_types)
+                res.warnings = [
+                    "Groq is not configured; fell back to local Tesseract OCR."
+                ] + list(res.warnings)
+                return res
             raise OCRUnavailableError(
-                "Local Tesseract OCR engine was not found on this machine. "
-                "Install Tesseract OCR or paste the receipt text manually."
+                "Groq is not configured and local OCR is not installed. "
+                "Please paste receipt text manually or enter expenses directly."
             )
 
-        extracted_text = ocr.extract_text(image_bytes)
-        rule_result = self._rule.parse(extracted_text, existing_types)
+        # ------------------------------------------------------------------
+        # Both mode: Groq Vision primary, OCR merged if available
+        # ------------------------------------------------------------------
+        if has_groq:
+            ai_data = None
+            ai_exc = None
+            try:
+                ai_data = self._groq.analyze_receipt(image_bytes)
+            except GroqVisionError as exc:
+                ai_exc = exc
+                logger.warning("Groq Vision failed in both mode: %s", exc)
 
-        ai = None
-        try:
-            if self._groq.is_available():
-                ai = self._groq.analyze_receipt(image_bytes)
-        except GroqVisionError:
-            # Groq is disabled, timed out, rate-limited, or returned garbage.
-            # Fall back to Tesseract and allow manual correction.
-            ai = None
+            if ai_data is not None:
+                if has_ocr:
+                    try:
+                        extracted_text = ocr.extract_text(image_bytes)
+                        rule_result = self._rule.parse(extracted_text, existing_types)
+                        merged = _merge_results(rule_result, ai_data, existing_types)
+                        merged.scan_method = "hybrid"
+                        return merged
+                    except Exception as ocr_err:
+                        logger.warning("OCR step failed in hybrid mode: %s", ocr_err)
+                return _ai_only_response(ai_data, existing_types)
 
-        merged = _merge_results(rule_result, ai, existing_types)
-        merged.scan_method = "hybrid" if ai else "ocr"
-        if not ai:
-            merged.warnings = [
-                "Groq unavailable; using local Tesseract OCR only."
-            ] + list(merged.warnings)
-        return merged
+            # Groq failed: fall back to OCR if available
+            if has_ocr:
+                extracted_text = ocr.extract_text(image_bytes)
+                res = self._rule.parse(extracted_text, existing_types)
+                res.warnings = [
+                    f"Groq Vision unavailable ({ai_exc}); fell back to local Tesseract OCR."
+                ] + list(res.warnings)
+                return res
+
+            raise OCRUnavailableError(
+                f"Receipt analysis failed ({ai_exc}). Please paste receipt text manually or enter expenses directly."
+            )
+
+        # Groq not available, but OCR is available:
+        if has_ocr:
+            extracted_text = ocr.extract_text(image_bytes)
+            res = self._rule.parse(extracted_text, existing_types)
+            res.warnings = [
+                "Groq Vision is not configured; using local OCR only."
+            ] + list(res.warnings)
+            return res
+
+        raise OCRUnavailableError(
+            "Receipt analysis is currently unavailable on this server. "
+            "Please paste receipt text manually or enter expenses directly."
+        )
 
 
 _DEFAULT_PARSER: BaseReceiptParser = AIReceiptParser()

@@ -43,12 +43,12 @@ const MODE_TABS: ModeTab[] = [
   { id: 'text', label: 'Paste Text', icon: FileText },
 ]
 
-const SCAN_MODES: ScanMode[] = ['ocr', 'groq', 'both']
+const SCAN_MODES: ScanMode[] = ['both', 'groq', 'ocr']
 
 const scanModeLabels: Record<ScanMode, { label: string; desc: string }> = {
-  ocr: { label: 'OCR', desc: 'Local text extraction' },
-  groq: { label: 'Groq AI', desc: 'AI vision parsing' },
-  both: { label: 'Both', desc: 'OCR + AI vision' },
+  both: { label: 'Auto (Recommended)', desc: 'AI Vision + OCR' },
+  groq: { label: 'Groq Vision', desc: 'AI Vision only' },
+  ocr: { label: 'Local OCR', desc: 'Local extraction only' },
 }
 
 export function ReceiptScannerModal({ open, onClose, onParsed }: ReceiptScannerModalProps) {
@@ -208,6 +208,37 @@ export function ReceiptScannerModal({ open, onClose, onParsed }: ReceiptScannerM
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    if (!file) return
+    const validation = validateReceiptFile(file)
+    if (!validation.valid) {
+      setError(validation.error ?? 'Invalid receipt image.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+    setError(null)
+    setImageBlob(file)
+    setPreviewUrl(URL.createObjectURL(file))
+  }
+
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
     if (!file) return
     const validation = validateReceiptFile(file)
     if (!validation.valid) {
@@ -567,9 +598,17 @@ export function ReceiptScannerModal({ open, onClose, onParsed }: ReceiptScannerM
                       fileInputRef.current?.click()
                     }
                   }}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                   role="button"
                   tabIndex={0}
-                  className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-line bg-surface p-10 text-center transition hover:border-primary/60 hover:bg-primary-soft/50 cursor-pointer"
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition cursor-pointer',
+                    isDragging
+                      ? 'border-primary bg-primary-soft/80 scale-[1.01]'
+                      : 'border-line bg-surface hover:border-primary/60 hover:bg-primary-soft/50',
+                  )}
                 >
                   <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-soft text-primary">
                     <ImageIcon className="h-8 w-8" aria-hidden />

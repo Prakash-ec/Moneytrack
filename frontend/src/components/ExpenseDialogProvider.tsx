@@ -196,6 +196,7 @@ export function ExpenseDialogProvider({ children }: { children: ReactNode }) {
             key={dialog.key}
             expense={dialog.expense}
             initialTypeId={dialog.initialTypeId}
+            prefill={dialog.prefill}
             scannedReceipt={dialog.scannedReceipt}
             onOpenScan={openScanReceipt}
             onClose={closeDialog}

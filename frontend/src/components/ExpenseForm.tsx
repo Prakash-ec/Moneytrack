@@ -43,6 +43,7 @@ import { CATEGORY_OPTIONS, PAYMENT_METHOD_OPTIONS } from '@/utils/typeOptions'
 
 const expenseSchema = z.object({
   expense_type_id: z.string().min(1, 'Choose an expense type.'),
+  account_id: z.string().optional(),
   amount: z
     .string()
     .trim()
@@ -86,6 +87,28 @@ function loadQuickPrefs(): { category: Category; paymentMethod: PaymentMethod } 
   return null
 }
 
+function normalizePaymentMethod(method?: string | null): string {
+  if (!method) return ''
+  const trimmed = method.trim()
+  const found = PAYMENT_METHOD_OPTIONS.find(
+    (opt) => opt.toLowerCase() === trimmed.toLowerCase(),
+  )
+  if (found) return found
+  if (trimmed.toLowerCase().includes('card')) return 'Debit Card'
+  if (trimmed.toLowerCase().includes('upi')) return 'UPI'
+  if (trimmed.toLowerCase().includes('cash')) return 'Cash'
+  if (
+    trimmed.toLowerCase().includes('bank') ||
+    trimmed.toLowerCase().includes('net banking') ||
+    trimmed.toLowerCase().includes('neft') ||
+    trimmed.toLowerCase().includes('rtgs') ||
+    trimmed.toLowerCase().includes('imps')
+  ) {
+    return 'Bank Transfer'
+  }
+  return 'Other'
+}
+
 function saveQuickPrefs(category: Category, paymentMethod: PaymentMethod): void {
   if (typeof window === 'undefined') return
   try {
@@ -112,6 +135,7 @@ function scanMethodLabel(method: string): string {
 export function ExpenseForm({
   expense,
   initialTypeId,
+  prefill,
   scannedReceipt,
   onOpenScan,
   onClose,
@@ -124,6 +148,7 @@ export function ExpenseForm({
     merchant?: string
     note?: string
     payment_method?: string
+    account_id?: number
   }
   scannedReceipt?: ReceiptParseResult | null
   onOpenScan?: () => void
@@ -187,6 +212,13 @@ export function ExpenseForm({
     { enabled: true },
   )
 
+  const accountsQuery = useApiQuery(
+    ['bank-accounts', 'expense-form'],
+    () => api.listBankAccounts(false),
+    { enabled: true },
+  )
+  const bankAccounts = accountsQuery.data?.items ?? []
+
   const {
     register,
     handleSubmit,
@@ -204,18 +236,53 @@ export function ExpenseForm({
           ? String(scannedReceipt.suggested_expense_type_id)
           : initialTypeId
             ? String(initialTypeId)
-            : '',
+            : prefill?.initialTypeId
+              ? String(prefill.initialTypeId)
+              : '',
+      account_id: expense?.account_id
+        ? String(expense.account_id)
+        : prefill?.account_id
+          ? String(prefill.account_id)
+          : '',
       amount: expense
         ? paiseToAmountInput(expense.amount_paise)
         : scannedReceipt?.amount_paise
           ? paiseToAmountInput(scannedReceipt.amount_paise)
-          : '',
+          : prefill?.amount ?? '',
       expense_date: expense?.expense_date ?? (scannedReceipt?.expense_date ?? todayIST()),
-      note: expense?.note ?? (scannedReceipt?.note ?? ''),
-      payment_method: expense?.payment_method ?? (scannedReceipt?.payment_method ?? ''),
-      merchant: expense?.merchant ?? (scannedReceipt?.merchant ?? ''),
+      note: expense?.note ?? (scannedReceipt?.note ?? prefill?.note ?? ''),
+      payment_method: normalizePaymentMethod(
+        expense?.payment_method ?? (scannedReceipt?.payment_method ?? prefill?.payment_method ?? ''),
+      ),
+      merchant: expense?.merchant ?? (scannedReceipt?.merchant ?? prefill?.merchant ?? ''),
     },
   })
+
+  // Pre-fill form when prefill or scanned receipt is provided
+  useEffect(() => {
+    if (prefill && !expense && !scannedReceipt) {
+      if (prefill.initialTypeId) {
+        setValue('expense_type_id', String(prefill.initialTypeId), { shouldValidate: true })
+      }
+      if (prefill.amount) {
+        setValue('amount', prefill.amount, { shouldValidate: true })
+      }
+      if (prefill.merchant) {
+        setValue('merchant', prefill.merchant, { shouldValidate: true })
+      }
+      if (prefill.note) {
+        setValue('note', prefill.note, { shouldValidate: true })
+      }
+      if (prefill.payment_method) {
+        setValue('payment_method', normalizePaymentMethod(prefill.payment_method), {
+          shouldValidate: true,
+        })
+      }
+      if (prefill.account_id) {
+        setValue('account_id', String(prefill.account_id), { shouldValidate: true })
+      }
+    }
+  }, [prefill, expense, scannedReceipt, setValue])
 
   // Pre-fill form when scanned receipt is provided
   useEffect(() => {
@@ -237,7 +304,9 @@ export function ExpenseForm({
         setValue('merchant', scannedReceipt.merchant, { shouldValidate: true })
       }
       if (scannedReceipt.payment_method) {
-        setValue('payment_method', scannedReceipt.payment_method, { shouldValidate: true })
+        setValue('payment_method', normalizePaymentMethod(scannedReceipt.payment_method), {
+          shouldValidate: true,
+        })
       }
       if (scannedReceipt.note) {
         setValue('note', scannedReceipt.note, { shouldValidate: true })
@@ -286,6 +355,37 @@ export function ExpenseForm({
     }
   }, [activeTypes.length, expense, typesQuery.loading])
 
+  // Auto-match an expense type when prefill is provided and no type is selected yet
+  useEffect(() => {
+    if (!expense && !scannedReceipt && prefill && selectableTypes.length > 0) {
+      const currentTypeId = watch('expense_type_id')
+      if (!currentTypeId) {
+        const queryTerm = (prefill.merchant || prefill.note || '').toLowerCase()
+        if (queryTerm) {
+          const match = selectableTypes.find((t) => {
+            const tName = t.name.toLowerCase()
+            const tCat = (t.category || '').toLowerCase()
+            return (
+              tName.includes(queryTerm) ||
+              queryTerm.includes(tName) ||
+              (queryTerm.includes('chai') && (tName.includes('food') || tCat.includes('food'))) ||
+              (queryTerm.includes('lunch') && (tName.includes('food') || tCat.includes('food'))) ||
+              (queryTerm.includes('fuel') && (tName.includes('fuel') || tName.includes('trans') || tCat.includes('travel'))) ||
+              (queryTerm.includes('grocer') && (tName.includes('grocer') || tCat.includes('food') || tCat.includes('shop')))
+            )
+          })
+          if (match) {
+            setValue('expense_type_id', String(match.id), { shouldValidate: true })
+          } else if (selectableTypes.length > 0) {
+            setValue('expense_type_id', String(selectableTypes[0].id), { shouldValidate: true })
+          }
+        } else if (selectableTypes.length > 0) {
+          setValue('expense_type_id', String(selectableTypes[0].id), { shouldValidate: true })
+        }
+      }
+    }
+  }, [expense, scannedReceipt, prefill, selectableTypes, setValue, watch])
+
   const onSubmit = handleSubmit(async (values) => {
     const amountPaise = parseRupeesToPaise(values.amount)
     if (!amountPaise) return
@@ -293,11 +393,12 @@ export function ExpenseForm({
 
     const payload = {
       expense_type_id: Number(values.expense_type_id),
+      account_id: values.account_id && Number(values.account_id) > 0 ? Number(values.account_id) : null,
       amount_paise: amountPaise,
       expense_date: values.expense_date,
-      note: values.note.trim() || null,
+      note: values.note ? values.note.trim() || null : null,
       payment_method: (values.payment_method || null) as PaymentMethod | null,
-      merchant: values.merchant.trim() || null,
+      merchant: values.merchant ? values.merchant.trim() || null : null,
     }
 
     try {
@@ -397,11 +498,12 @@ export function ExpenseForm({
       if (!amountPaise) return
       const payload = {
         expense_type_id: Number(values.expense_type_id),
+        account_id: values.account_id && Number(values.account_id) > 0 ? Number(values.account_id) : null,
         amount_paise: amountPaise,
         expense_date: values.expense_date,
-        note: values.note.trim() || null,
+        note: values.note ? values.note.trim() || null : null,
         payment_method: (values.payment_method || null) as PaymentMethod | null,
-        merchant: values.merchant.trim() || null,
+        merchant: values.merchant ? values.merchant.trim() || null : null,
       }
       if (expense) {
         await api.updateExpense(expense.id, payload)
@@ -850,10 +952,32 @@ export function ExpenseForm({
             </Select>
             <p className="text-xs text-subtle mt-1">
               {quickPrefs?.paymentMethod
-                ? `Last used: {quickPrefs.paymentMethod}`
+                ? `Last used: ${quickPrefs.paymentMethod}`
                 : 'Select a payment method'}
             </p>
           </Field>
+
+          {bankAccounts.length > 0 ? (
+            <Field
+              label="Paid from account"
+              htmlFor="expense-account"
+              optional
+              error={errors.account_id?.message}
+            >
+              <Select id="expense-account" {...register('account_id')}>
+                <option value="">No account linked</option>
+                {bankAccounts.map((account) => {
+                  const accName = account.name || (account as any).account_name || 'Account'
+                  const accMask = account.account_number_mask ? ` (${account.account_number_mask})` : ''
+                  return (
+                    <option key={account.id} value={String(account.id)}>
+                      {accName}{accMask}
+                    </option>
+                  )
+                })}
+              </Select>
+            </Field>
+          ) : null}
 
           <Field label="Merchant or recipient" htmlFor="merchant" optional error={errors.merchant?.message}>
             <Input

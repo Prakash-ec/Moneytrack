@@ -64,7 +64,10 @@ export function BankAccountsPage() {
   // Query
   const accountsQuery = useApiQuery(['bank-accounts'], () => api.listBankAccounts(true))
   const accounts = accountsQuery.data?.items ?? []
-  const consolidatedPaise = accountsQuery.data?.consolidated_balance_paise ?? 0
+  const consolidatedPaise =
+    accountsQuery.data?.consolidated_balance_paise ??
+    (accountsQuery.data as any)?.total_balance_paise ??
+    0
   const reportedPaise = accountsQuery.data?.total_reported_balance_paise ?? 0
   const discrepancyPaise = reportedPaise - consolidatedPaise
 
@@ -82,13 +85,17 @@ export function BankAccountsPage() {
 
   const openEditDialog = (account: BankAccount) => {
     setEditingAccount(account)
-    setFormName(account.name)
-    setFormBankName(account.bank_name)
+    setFormName(account.name || (account as any).account_name || '')
+    setFormBankName(account.bank_name || '')
     setFormMask(account.account_number_mask ?? '')
-    setFormType(account.account_type)
-    setFormOpeningBalance((account.opening_balance_paise / 100).toString())
-    setFormOpeningDate(account.opening_date)
-    setFormIsPrimary(account.is_primary)
+    setFormType(account.account_type || 'savings')
+    setFormOpeningBalance(((account.opening_balance_paise ?? 0) / 100).toString())
+    setFormOpeningDate(
+      account.opening_date ||
+        (account as any).opening_balance_date ||
+        new Date().toISOString().slice(0, 10),
+    )
+    setFormIsPrimary(Boolean(account.is_primary))
     setIsDialogOpen(true)
   }
 
@@ -103,13 +110,16 @@ export function BankAccountsPage() {
 
     setSubmitting(true)
     try {
-      const payload: BankAccountCreateInput = {
+      const maskVal = formMask.trim() || 'XX0000'
+      const payload: BankAccountCreateInput & Record<string, unknown> = {
         name: formName.trim(),
+        account_name: formName.trim(),
         bank_name: formBankName.trim(),
-        account_number_mask: formMask.trim() || null,
+        account_number_mask: maskVal,
         account_type: formType,
         opening_balance_paise: openingPaise,
         opening_date: formOpeningDate,
+        opening_balance_date: formOpeningDate,
         is_primary: formIsPrimary,
       }
 
@@ -295,7 +305,7 @@ export function BankAccountsPage() {
                       </div>
                       <div>
                         <div className="font-bold text-base text-text flex items-center gap-2">
-                          <span>{account.name}</span>
+                          <span>{account.name || (account as any).account_name}</span>
                           {account.is_primary && (
                             <Badge tone="primary">Primary</Badge>
                           )}
@@ -346,7 +356,7 @@ export function BankAccountsPage() {
 
                   {/* Metadata */}
                   <div className="text-[11px] text-muted space-y-1">
-                    <div>Opening Balance: {formatINR(account.opening_balance_paise)} on {formatDate(account.opening_date)}</div>
+                    <div>Opening Balance: {formatINR(account.opening_balance_paise)} on {formatDate(account.opening_date || (account as any).opening_balance_date)}</div>
                     {account.last_reported_at && (
                       <div>Last SMS Sync: {formatDate(account.last_reported_at)}</div>
                     )}

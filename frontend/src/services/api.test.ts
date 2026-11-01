@@ -293,4 +293,76 @@ describe('api.createExpenseType', () => {
     expect(rep.savings_rate_percent).toBe(66.7)
     expect(fetchMock.mock.calls[0][0]).toContain('/api/reports/weekly?start_date=2026-10-19&end_date=2026-10-25')
   })
+
+  it('correctly dispatches parseReceipt with image FormData', async () => {
+    const parseResult = {
+      merchant: 'Fresh Mart',
+      amount_paise: 24500,
+      expense_date: '2026-11-01',
+      currency: 'INR',
+      subtotal_paise: 23000,
+      tax_paise: 1500,
+      payment_method: 'UPI',
+      items: [{ name: 'Apples', amount_paise: 24500, quantity: 1 }],
+      note: 'Scanned via Groq AI vision (Fresh Mart)',
+      suggested_expense_type_id: 2,
+      suggested_expense_type_name: 'Groceries',
+      suggested_new_type_name: null,
+      confidence: { amount: 0.99 },
+      warnings: [],
+      raw_text: 'Fresh Mart Total: 245.00',
+      scan_method: 'groq',
+    }
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, parseResult))
+    globalThis.fetch = fetchMock
+
+    const fakeBlob = new Blob(['fake image bytes'], { type: 'image/jpeg' })
+    const result = await api.parseReceipt(fakeBlob, 'both')
+
+    expect(result.merchant).toBe('Fresh Mart')
+    expect(result.amount_paise).toBe(24500)
+    expect(result.payment_method).toBe('UPI')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/receipts/parse')
+    const reqInit = fetchMock.mock.calls[0][1]
+    expect(reqInit?.method).toBe('POST')
+    expect(reqInit?.body instanceof FormData).toBe(true)
+  })
+
+  it('saves an expense with reviewed receipt details', async () => {
+    const createdExpense = {
+      id: 42,
+      expense_type_id: 2,
+      account_id: 1,
+      amount_paise: 24500,
+      expense_date: '2026-11-01',
+      note: 'Fresh apples from mart',
+      payment_method: 'UPI',
+      merchant: 'Fresh Mart',
+      created_at: '2026-11-01T10:00:00Z',
+      updated_at: '2026-11-01T10:00:00Z',
+      expense_type: { id: 2, name: 'Groceries', color: '#10B981', category: 'Food', is_archived: false },
+    }
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(201, createdExpense))
+    globalThis.fetch = fetchMock
+
+    const res = await api.createExpense({
+      expense_type_id: 2,
+      account_id: 1,
+      amount_paise: 24500,
+      expense_date: '2026-11-01',
+      merchant: 'Fresh Mart',
+      payment_method: 'UPI',
+      note: 'Fresh apples from mart',
+    })
+
+    expect(res.id).toBe(42)
+    expect(res.amount_paise).toBe(24500)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/expenses')
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string)
+    expect(body.amount_paise).toBe(24500)
+    expect(body.account_id).toBe(1)
+    expect(body.merchant).toBe('Fresh Mart')
+    expect(body.payment_method).toBe('UPI')
+  })
 })

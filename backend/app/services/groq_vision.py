@@ -67,19 +67,23 @@ class GroqResponseError(GroqVisionError):
 _RECEIPT_JSON_SCHEMA_DESCRIPTION = """
 Analyze the receipt image and return a single JSON object with these fields:
 - merchant: string or null (shop / biller name)
-- expense_date: string in YYYY-MM-DD format or null
-- total_paise: integer or null (final payable amount in the smallest currency unit, e.g. paise for INR)
+- expense_date: string in YYYY-MM-DD format or null (transaction or bill date)
+- total_paise: integer or null (final payable amount in the smallest currency unit, e.g. paise for INR; 1 Rupee = 100 paise)
 - currency: 3-letter currency code (default "INR")
-- payment_method: string or null (e.g. "Cash", "UPI", "Credit Card", "Debit Card")
+- subtotal_paise: integer or null (subtotal amount in paise, before tax/discount)
+- tax_paise: integer or null (total tax/GST/VAT amount in paise)
+- payment_method: string or null (e.g. "Cash", "UPI", "Credit Card", "Debit Card", "Net Banking")
 - suggested_category: string or null (one of: Food, Travel, Utilities, Education, Shopping, Health, Entertainment, Housing, Other)
-- confidence: object with optional keys merchant, date, amount, type (0.0-1.0)
+- receipt_text: string or null (concise transcript or key text lines visible on the receipt)
+- line_items: array of {name: string, amount_paise: integer or null, quantity: integer or null} or empty list
+- confidence: object with optional keys merchant, date, amount, type (numeric values 0.0-1.0)
 
 Rules:
 - Return ONLY valid JSON, no markdown fences, no extra text.
-- total_paise is the FINAL amount payable. Do NOT pick cash-tendered, phone numbers,
-  dates, or unrelated large numbers. If unsure, set total_paise to null.
-- Dates must be real calendar dates; if none is visible, return null.
-- If a field cannot be determined, use null rather than guessing.
+- total_paise is the FINAL net amount payable. Do NOT pick cash-tendered, phone numbers,
+  dates, invoice numbers, or unrelated large numbers. If unsure, set total_paise to null.
+- Dates must be real calendar dates (normalize DD/MM/YYYY or DD-MM-YYYY to YYYY-MM-DD); if none is visible, return null.
+- If a field cannot be determined reliably from the image, use null rather than guessing or inventing values.
 """
 
 
@@ -153,13 +157,28 @@ def _normalize_amount(value: Any) -> int | None:
     """Coerce a Groq-returned total into integer paise, with bounds sanity check."""
     if value is None:
         return None
+    is_decimal_str = False
     try:
-        num = float(value)
+        if isinstance(value, str):
+            clean = re.sub(r"[^\d.]", "", value.strip())
+            num = float(clean) if clean else None
+            is_decimal_str = "." in clean
+        else:
+            num = float(value)
+            is_decimal_str = (num % 1 != 0)
     except (TypeError, ValueError):
         return None
-    if num != num or num == float("inf"):  # NaN / infinity guard
+    if num is None or num != num or num == float("inf"):
         return None
-    paise = int(round(num * 100)) if num < 1000 else int(round(num))
+
+    # If explicitly given with decimals, or fractional rupees, express in paise (* 100)
+    if is_decimal_str or (num % 1 != 0):
+        paise = int(round(num * 100))
+    elif num < 1000:
+        paise = int(round(num * 100))
+    else:
+        paise = int(round(num))
+
     if paise < MIN_TOTAL_PAISE or paise > MAX_TOTAL_PAISE:
         return None
     return paise
@@ -517,8 +536,23 @@ class GroqVisionProvider:
         return self._parse_json_fields(data)
 
     def _parse_json_fields(self, data: dict[str, Any]) -> dict[str, Any]:
-        total_paise = _normalize_amount(data.get("total_paise"))
-        expense_date = _normalize_date(data.get("expense_date"))
+        raw_total = (
+            data.get("total_paise")
+            if data.get("total_paise") is not None
+            else (
+                data.get("total_amount")
+                if data.get("total_amount") is not None
+                else data.get("amount") if data.get("amount") is not None else data.get("total")
+            )
+        )
+        total_paise = _normalize_amount(raw_total)
+        subtotal_paise = _normalize_amount(
+            data.get("subtotal_paise") if data.get("subtotal_paise") is not None else data.get("subtotal")
+        )
+        tax_paise = _normalize_amount(
+            data.get("tax_paise") if data.get("tax_paise") is not None else data.get("tax")
+        )
+        expense_date = _normalize_date(data.get("expense_date") or data.get("date"))
         currency = data.get("currency")
         if not isinstance(currency, str) or not currency.strip():
             currency = "INR"
@@ -537,13 +571,22 @@ class GroqVisionProvider:
 
         line_items = _normalize_line_items(data.get("line_items"))
 
+        raw_text = data.get("receipt_text") or data.get("raw_text")
+        if isinstance(raw_text, str) and raw_text.strip():
+            raw_text = raw_text.strip()
+        else:
+            raw_text = None
+
         return {
             "merchant": merchant.strip() if merchant else None,
             "expense_date": expense_date.isoformat() if expense_date else None,
             "total_paise": total_paise,
+            "subtotal_paise": subtotal_paise,
+            "tax_paise": tax_paise,
             "currency": currency,
             "payment_method": payment_method.strip() if payment_method else None,
             "suggested_category": suggested_category,
             "confidence": confidence,
             "line_items": line_items,
+            "raw_text": raw_text,
         }

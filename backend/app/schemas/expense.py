@@ -27,6 +27,17 @@ class ExpenseBase(BaseModel):
     payment_method: PaymentMethod | None = None
     merchant: str | None = Field(default=None, max_length=120)
 
+    @field_validator("payment_method", mode="before")
+    @classmethod
+    def normalize_payment_method(cls, value: object) -> object:
+        if value is None or not str(value).strip():
+            return None
+        v = str(value).strip()
+        for member in PaymentMethod:
+            if member.value.lower() == v.lower():
+                return member
+        return value
+
     @field_validator("note")
     @classmethod
     def clean_note(cls, value: str | None) -> str | None:
@@ -56,6 +67,17 @@ class ExpenseUpdate(BaseModel):
     def validate_not_null(cls, value: object, info: ValidationInfo) -> object:
         if value is None:
             raise ValueError(f"{info.field_name.replace('_', ' ').capitalize()} cannot be null")
+        return value
+
+    @field_validator("payment_method", mode="before")
+    @classmethod
+    def normalize_payment_method(cls, value: object) -> object:
+        if value is None or not str(value).strip():
+            return None
+        v = str(value).strip()
+        for member in PaymentMethod:
+            if member.value.lower() == v.lower():
+                return member
         return value
 
     @field_validator("note")

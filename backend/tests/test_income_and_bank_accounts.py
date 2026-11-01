@@ -232,3 +232,59 @@ def test_cashflow_summary_endpoint(client: TestClient):
     assert "savings_rate_percent" in data
     assert "total_bank_balance_paise" in data
     assert "accounts" in data
+
+
+def test_bank_account_frontend_compatibility_and_expense_linking(client: TestClient, make_type):
+    food_type = make_type(name="Cafeteria", category="Food")
+
+    # 1. Create account with frontend payload format (name, opening_date, null mask, wallet type)
+    res = client.post(
+        "/api/bank-accounts",
+        json={
+            "name": "Paytm Wallet",
+            "bank_name": "Paytm Payments Bank",
+            "account_number_mask": None,
+            "account_type": "wallet",
+            "opening_balance_paise": 100000,
+            "opening_date": "2026-10-01",
+            "is_primary": True,
+        },
+    )
+    assert res.status_code == 201, res.text
+    data = res.json()
+    assert data["account_name"] == "Paytm Wallet"
+    assert data["name"] == "Paytm Wallet"
+    assert data["opening_date"] == "2026-10-01"
+    assert data["opening_balance_date"] == "2026-10-01"
+    account_id = data["id"]
+
+    # 2. Verify list response includes computed fields
+    list_res = client.get("/api/bank-accounts")
+    assert list_res.status_code == 200
+    list_data = list_res.json()
+    assert "consolidated_balance_paise" in list_data
+    assert "total_accounts" in list_data
+
+    # 3. Create expense linked to this account with lowercase payment_method
+    exp_res = client.post(
+        "/api/expenses",
+        json={
+            "expense_type_id": food_type["id"],
+            "account_id": account_id,
+            "amount_paise": 25000,
+            "expense_date": "2026-10-10",
+            "payment_method": "upi",
+            "merchant": "Campus Cafe",
+        },
+    )
+    assert exp_res.status_code == 201, exp_res.text
+    exp_data = exp_res.json()
+    assert exp_data["account_id"] == account_id
+    assert exp_data["payment_method"] == "UPI"
+
+    # 4. Check that account current balance reflects deduction
+    acc_check = client.get(f"/api/bank-accounts/{account_id}")
+    assert acc_check.status_code == 200
+    # 100000 - 25000 = 75000
+    assert acc_check.json()["current_balance_paise"] == 75000
+

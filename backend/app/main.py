@@ -29,13 +29,16 @@ def run_startup_migrations() -> None:
     from alembic import command
     from alembic.config import Config
 
-    alembic_ini_path = Path(__file__).resolve().parents[2] / "alembic.ini"
+    alembic_ini_path = Path(__file__).resolve().parents[1] / "alembic.ini"
     if not alembic_ini_path.exists():
-        alembic_ini_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+        alembic_ini_path = Path(__file__).resolve().parents[2] / "alembic.ini"
 
     if alembic_ini_path.exists():
         try:
             cfg = Config(str(alembic_ini_path))
+            alembic_folder = alembic_ini_path.parent / "alembic"
+            if alembic_folder.exists():
+                cfg.set_main_option("script_location", str(alembic_folder.resolve()))
             command.upgrade(cfg, "head")
             logger.info("Database schema verified and upgraded to latest Alembic revision (head).")
         except Exception as exc:
@@ -46,9 +49,57 @@ def run_startup_migrations() -> None:
             raise RuntimeError(f"Database migration failed on startup: {err_msg}") from None
 
 
+def seed_default_expense_types() -> None:
+    """Ensure standard default expense types exist without overriding existing custom types."""
+    from app.db.session import SessionLocal
+    from app.models.expense_type import ExpenseType
+    from app.services.expense_types import name_key
+
+    default_types = [
+        {"name": "Food & Dining", "category": "Food", "icon": "utensils", "color": "#0F766E"},
+        {"name": "Groceries", "category": "Food", "icon": "shopping-cart", "color": "#10B981"},
+        {"name": "Transportation", "category": "Travel", "icon": "bus", "color": "#4F46E5"},
+        {"name": "Fuel", "category": "Travel", "icon": "fuel", "color": "#D97706"},
+        {"name": "Utilities", "category": "Utilities", "icon": "zap", "color": "#DC2626"},
+        {"name": "Mobile Recharge", "category": "Other", "icon": "smartphone", "color": "#0284C7"},
+        {"name": "Shopping", "category": "Shopping", "icon": "shopping-bag", "color": "#EA580C"},
+        {"name": "Medical", "category": "Health", "icon": "heart", "color": "#E11D48"},
+        {"name": "Entertainment", "category": "Entertainment", "icon": "film", "color": "#7C3AED"},
+        {"name": "Rent & Maintenance", "category": "Housing", "icon": "home", "color": "#6366F1"},
+        {"name": "Education", "category": "Education", "icon": "book-open", "color": "#2563EB"},
+        {"name": "Other", "category": "Other", "icon": "tag", "color": "#64748B"},
+    ]
+
+    try:
+        with SessionLocal() as db:
+            existing_keys = {t.name_key for t in db.query(ExpenseType).all()}
+            added = 0
+            for item in default_types:
+                k = name_key(item["name"])
+                if k not in existing_keys:
+                    db.add(
+                        ExpenseType(
+                            name=item["name"],
+                            name_key=k,
+                            category=item["category"],
+                            icon=item["icon"],
+                            color=item["color"],
+                            is_archived=False,
+                        )
+                    )
+                    existing_keys.add(k)
+                    added += 1
+            if added > 0:
+                db.commit()
+                logger.info("Seeded %d standard default expense types.", added)
+    except Exception as exc:
+        logger.warning("Could not seed default expense types on startup: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     run_startup_migrations()
+    seed_default_expense_types()
     yield
     try:
         from app.db.session import engine
