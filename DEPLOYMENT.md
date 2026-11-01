@@ -128,7 +128,7 @@ If not using Blueprints:
    - **Instance Type**: `Free`
 4. Add Environment Variables:
    - `DATABASE_URL`: Your Neon PostgreSQL connection string.
-   - `CORS_ORIGINS`: `*` (or your frontend domain URL).
+   - `CORS_ORIGINS`: `https://moneytrack-frontend.onrender.com,http://localhost:5173,https://localhost,capacitor://localhost` (or your custom frontend domain URL).
    - `PYTHON_VERSION`: `3.11.9`
    - `SERVE_FRONTEND`: `false`
 5. Click **Deploy Web Service**.
