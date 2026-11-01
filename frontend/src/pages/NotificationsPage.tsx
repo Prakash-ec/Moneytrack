@@ -3,6 +3,7 @@ import {
   Bell,
   Check,
   CheckCheck,
+  CheckCircle2,
   Moon,
   Settings,
   ShieldAlert,
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { CardSkeleton, EmptyState, ErrorState } from '@/components/ui/States'
 import { api, ApiError } from '@/services/api'
+import { checkAppPermission, requestAppPermission, type PermissionStateResult } from '@/services/permissions'
 import type {
   NotificationCenterSummary,
   NotificationPreferences,
@@ -26,6 +28,8 @@ export default function NotificationsPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL')
   const [prefsModalOpen, setPrefsModalOpen] = useState(false)
+  const [notifPermission, setNotifPermission] = useState<PermissionStateResult>('prompt')
+  const [requestingNotif, setRequestingNotif] = useState(false)
 
   const loadNotifications = async () => {
     setLoading(true)
@@ -47,7 +51,18 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     loadNotifications()
+    void checkAppPermission('notifications').then(setNotifPermission)
   }, [])
+
+  const handleRequestPermission = async () => {
+    setRequestingNotif(true)
+    try {
+      const granted = await requestAppPermission('notifications')
+      setNotifPermission(granted ? 'granted' : 'denied')
+    } finally {
+      setRequestingNotif(false)
+    }
+  }
 
   const handleMarkRead = async (id: number) => {
     try {
@@ -135,6 +150,44 @@ export default function NotificationsPage() {
           )}
         </div>
       </div>
+
+      {/* Notification Permission Info Card */}
+      {notifPermission === 'granted' ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 sm:px-4 text-xs text-emerald-400">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            <span className="font-medium">
+              Push & system notification permission is <strong>active</strong>. You will receive real-time alerts for unusual debits & weekly spending digests.
+            </span>
+          </div>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 shrink-0">
+            Granted
+          </span>
+        </div>
+      ) : (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-300">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <Bell className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+            <div>
+              <strong className="block text-sm text-text font-semibold">
+                Notification permission is not granted
+              </strong>
+              <p className="text-muted mt-0.5">
+                Enable device notifications so MoneyTrack can alert you immediately when unusual bank transactions or Monday weekly digest reports arrive.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="primary"
+            loading={requestingNotif}
+            onClick={handleRequestPermission}
+            className="shrink-0 self-start sm:self-auto"
+          >
+            Enable Notifications
+          </Button>
+        </div>
+      )}
 
       {/* Category Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-semibold no-scrollbar">

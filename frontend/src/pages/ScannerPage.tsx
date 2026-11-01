@@ -268,9 +268,27 @@ export function ScannerPage() {
       </div>
 
       {error ? (
-        <div className="flex items-start gap-3 rounded-xl border border-danger/25 bg-danger/[0.05] p-3 text-sm text-danger" role="alert">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{error}</span>
+        <div className="flex flex-col gap-2 rounded-xl border border-danger/25 bg-danger/[0.05] p-3 text-sm text-danger" role="alert">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span className="flex-1">{error}</span>
+          </div>
+          {mode !== 'text' ? (
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setError(null)
+                  handleTabChange('text')
+                }}
+                className="text-xs h-8"
+              >
+                Paste Receipt Text Instead
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

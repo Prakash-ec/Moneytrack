@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 
-import type { Expense, ReceiptParseResult } from '@/types/api'
+import type { Expense, ExpenseType, ReceiptParseResult } from '@/types/api'
 
 const ExpenseForm = lazy(() =>
   import('@/components/ExpenseForm').then((module) => ({ default: module.ExpenseForm })),
@@ -44,6 +44,7 @@ interface DialogState {
   key: number
   expense: Expense | null
   initialTypeId?: number
+  createdType?: ExpenseType
   prefill?: InitialExpensePrefill
   scannedReceipt?: ReceiptParseResult | null
 }
@@ -107,23 +108,24 @@ export function ExpenseDialogProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const handleCreateType = useCallback(
-    async (newTypeId: number) => {
+    async (createdType: ExpenseType) => {
       const scannedReceipt = typeConfirmation?.scannedReceipt
       setTypeConfirmation(null)
       setDialog({
         key: Date.now(),
         expense: null,
+        createdType,
         // Mark the newly created type as the suggested one so the review form
         // does not re-prompt for type creation.
         scannedReceipt: scannedReceipt
           ? {
               ...scannedReceipt,
-              suggested_expense_type_id: newTypeId,
-              suggested_expense_type_name: null,
+              suggested_expense_type_id: createdType.id,
+              suggested_expense_type_name: createdType.name,
               suggested_new_type_name: null,
             }
           : null,
-        initialTypeId: newTypeId,
+        initialTypeId: createdType.id,
       })
     },
     [typeConfirmation?.scannedReceipt],
@@ -196,6 +198,7 @@ export function ExpenseDialogProvider({ children }: { children: ReactNode }) {
             key={dialog.key}
             expense={dialog.expense}
             initialTypeId={dialog.initialTypeId}
+            createdType={dialog.createdType}
             prefill={dialog.prefill}
             scannedReceipt={dialog.scannedReceipt}
             onOpenScan={openScanReceipt}

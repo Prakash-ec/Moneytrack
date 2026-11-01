@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   MessageSquareText,
   Moon,
+  MoreHorizontal,
   PieChart,
   Plus,
   Receipt,
@@ -28,6 +29,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 
 import { CommandPalette } from '@/components/CommandPalette'
 import { useExpenseDialog } from '@/components/ExpenseDialogProvider'
+import { Modal } from '@/components/ui/Modal'
 import { OfflineBanner, SlowNetworkBanner } from '@/components/ui/States'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { useDataRefresh } from '@/providers/RefreshProvider'
@@ -66,9 +68,6 @@ const MOBILE_NAV_ITEMS: NavItem[] = [
   { to: '/expenses', label: 'Expenses', icon: Receipt },
   { to: '/bank-accounts', label: 'Banks', icon: Building2 },
   { to: '/weekly-report', label: 'Report', icon: Calendar },
-  { to: '/security', label: 'Security', icon: ShieldCheck },
-  { to: '/notifications', label: 'Alerts', icon: Bell },
-  { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 function Brand({ onClick }: { onClick?: () => void }) {
@@ -273,9 +272,13 @@ function Topbar({
 function MobileNav({
   unauthorisedSmsCount,
   unreadNotifCount = 0,
+  onMoreClick,
+  isMoreActive,
 }: {
   unauthorisedSmsCount: number
   unreadNotifCount?: number
+  onMoreClick: () => void
+  isMoreActive: boolean
 }) {
   return (
     <nav className="mobile-nav" aria-label="Mobile navigation">
@@ -288,20 +291,27 @@ function MobileNav({
         >
           <div className="relative inline-flex items-center justify-center">
             <item.icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-            {item.to === '/sms-review' && unauthorisedSmsCount > 0 && (
-              <span className="notification-badge absolute -top-1.5 -right-2 text-[9px] min-w-[14px] h-[14px] p-0 flex items-center justify-center">
-                {unauthorisedSmsCount}
-              </span>
-            )}
-            {item.to === '/notifications' && unreadNotifCount > 0 && (
-              <span className="notification-badge absolute -top-1.5 -right-2 text-[9px] min-w-[14px] h-[14px] p-0 flex items-center justify-center bg-danger">
-                {unreadNotifCount}
-              </span>
-            )}
           </div>
           <span>{item.label}</span>
         </NavLink>
       ))}
+
+      <button
+        type="button"
+        onClick={onMoreClick}
+        className={isMoreActive ? 'active' : ''}
+        aria-label="More navigation items"
+      >
+        <div className="relative inline-flex items-center justify-center">
+          <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          {(unauthorisedSmsCount > 0 || unreadNotifCount > 0) && (
+            <span className="notification-badge absolute -top-1.5 -right-2 text-[9px] min-w-[14px] h-[14px] p-0 flex items-center justify-center bg-danger">
+              {unauthorisedSmsCount + unreadNotifCount}
+            </span>
+          )}
+        </div>
+        <span>More</span>
+      </button>
     </nav>
   )
 }
@@ -309,6 +319,7 @@ function MobileNav({
 export function AppLayout() {
   const online = useOnlineStatus()
   const location = useLocation()
+  const navigate = useNavigate()
   const { invalidate } = useDataRefresh()
   const { showToast } = useToast()
   const { openCreate } = useExpenseDialog()
@@ -317,6 +328,19 @@ export function AppLayout() {
   const [unauthorisedSmsCount, setUnauthorisedSmsCount] = useState(0)
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+
+  const isMoreActive = [
+    '/income',
+    '/transfers',
+    '/breakdown',
+    '/expense-types',
+    '/trends',
+    '/security',
+    '/sms-review',
+    '/notifications',
+    '/settings',
+  ].some((p) => location.pathname.startsWith(p))
 
   // Polling unread notification count
   const checkNotifications = useCallback(async () => {
@@ -485,7 +509,177 @@ export function AppLayout() {
       <MobileNav
         unauthorisedSmsCount={unauthorisedSmsCount}
         unreadNotifCount={unreadNotifCount}
+        onMoreClick={() => setMoreMenuOpen(true)}
+        isMoreActive={isMoreActive}
       />
+
+      <Modal
+        open={moreMenuOpen}
+        onClose={() => setMoreMenuOpen(false)}
+        title="Quick Navigation & Tools"
+        description="Jump to all MoneyTrack features"
+      >
+        <div className="grid grid-cols-2 gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/income')
+            }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
+          >
+            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+              <ArrowDownLeft className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-text">Income</div>
+              <div className="text-[10px] text-muted">Earnings & Salary</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/transfers')
+            }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
+          >
+            <div className="p-2 rounded-lg bg-sky-500/10 text-sky-400">
+              <ArrowLeftRight className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-text">Transfers</div>
+              <div className="text-[10px] text-muted">Between Accounts</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/breakdown')
+            }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
+          >
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+              <PieChart className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-text">Breakdown</div>
+              <div className="text-[10px] text-muted">Category Analytics</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/expense-types')
+            }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
+          >
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
+              <Tags className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-text">Expense Types</div>
+              <div className="text-[10px] text-muted">Categories</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/trends')
+            }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
+          >
+            <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-text">Trends</div>
+              <div className="text-[10px] text-muted">Spending Velocity</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/security')
+            }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
+          >
+            <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-text">Security</div>
+              <div className="text-[10px] text-muted">Fraud Detection</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/sms-review')
+            }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition relative"
+          >
+            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
+              <MessageSquareText className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold text-text flex items-center justify-between">
+                <span>SMS Review</span>
+                {unauthorisedSmsCount > 0 && <span className="notification-badge">{unauthorisedSmsCount}</span>}
+              </div>
+              <div className="text-[10px] text-muted">Auto-detected</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/notifications')
+            }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
+          >
+            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
+              <Bell className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold text-text flex items-center justify-between">
+                <span>Alerts</span>
+                {unreadNotifCount > 0 && <span className="notification-badge">{unreadNotifCount}</span>}
+              </div>
+              <div className="text-[10px] text-muted">Notifications</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreMenuOpen(false)
+              navigate('/settings')
+            }}
+            className="col-span-2 flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
+          >
+            <div className="p-2 rounded-lg bg-slate-500/10 text-slate-400">
+              <Settings className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-text">Settings & Backup</div>
+              <div className="text-[10px] text-muted">Preferences, Theme, and Data Export/Restore</div>
+            </div>
+          </button>
+        </div>
+      </Modal>
 
       <CommandPalette
         open={commandPaletteOpen}

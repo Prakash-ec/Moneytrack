@@ -135,6 +135,7 @@ function scanMethodLabel(method: string): string {
 export function ExpenseForm({
   expense,
   initialTypeId,
+  createdType,
   prefill,
   scannedReceipt,
   onOpenScan,
@@ -142,6 +143,7 @@ export function ExpenseForm({
 }: {
   expense: Expense | null
   initialTypeId?: number
+  createdType?: ExpenseType
   prefill?: {
     initialTypeId?: number
     amount?: string
@@ -160,7 +162,9 @@ export function ExpenseForm({
   const { invalidate } = useDataRefresh()
   const { showToast } = useToast()
   const [formError, setFormError] = useState<string | null>(null)
-  const [createdTypes, setCreatedTypes] = useState<ExpenseType[]>([])
+  const [createdTypes, setCreatedTypes] = useState<ExpenseType[]>(() =>
+    createdType ? [createdType] : [],
+  )
   const [showQuickType, setShowQuickType] = useState(false)
   const [quickName, setQuickName] = useState('')
   const [quickCategory, setQuickCategory] = useState<Category>('Other')
@@ -355,50 +359,124 @@ export function ExpenseForm({
     }
   }, [activeTypes.length, expense, typesQuery.loading])
 
-  // Auto-match an expense type when prefill is provided and no type is selected yet
+  // Auto-match an expense type when scanned receipt or prefill is provided and no valid type is selected yet
   useEffect(() => {
-    if (!expense && !scannedReceipt && prefill && selectableTypes.length > 0) {
-      const currentTypeId = watch('expense_type_id')
-      if (!currentTypeId) {
-        const queryTerm = (prefill.merchant || prefill.note || '').toLowerCase()
-        if (queryTerm) {
-          const match = selectableTypes.find((t) => {
-            const tName = t.name.toLowerCase()
-            const tCat = (t.category || '').toLowerCase()
-            return (
-              tName.includes(queryTerm) ||
-              queryTerm.includes(tName) ||
-              (queryTerm.includes('chai') && (tName.includes('food') || tCat.includes('food'))) ||
-              (queryTerm.includes('lunch') && (tName.includes('food') || tCat.includes('food'))) ||
-              (queryTerm.includes('fuel') && (tName.includes('fuel') || tName.includes('trans') || tCat.includes('travel'))) ||
-              (queryTerm.includes('grocer') && (tName.includes('grocer') || tCat.includes('food') || tCat.includes('shop')))
-            )
-          })
-          if (match) {
-            setValue('expense_type_id', String(match.id), { shouldValidate: true })
-          } else if (selectableTypes.length > 0) {
-            setValue('expense_type_id', String(selectableTypes[0].id), { shouldValidate: true })
-          }
-        } else if (selectableTypes.length > 0) {
-          setValue('expense_type_id', String(selectableTypes[0].id), { shouldValidate: true })
+    if (expense || selectableTypes.length === 0) return
+
+    const currentTypeId = watch('expense_type_id')
+    const currentValid = currentTypeId && selectableTypes.some((t) => String(t.id) === currentTypeId)
+    if (currentValid) return
+
+    // 1. If scannedReceipt is present:
+    if (scannedReceipt) {
+      // First, if suggested_expense_type_id is valid in selectableTypes
+      if (scannedReceipt.suggested_expense_type_id) {
+        const found = selectableTypes.find((t) => t.id === scannedReceipt.suggested_expense_type_id)
+        if (found) {
+          setValue('expense_type_id', String(found.id), { shouldValidate: true })
+          return
         }
       }
+
+      // Second, match by suggested_expense_type_name
+      if (scannedReceipt.suggested_expense_type_name) {
+        const target = scannedReceipt.suggested_expense_type_name.toLowerCase().trim()
+        const found = selectableTypes.find((t) => t.name.toLowerCase().trim() === target)
+        if (found) {
+          setValue('expense_type_id', String(found.id), { shouldValidate: true })
+          return
+        }
+      }
+
+      // Third, match by suggested category/name or text content
+      const categoryTerm = (
+        scannedReceipt.suggested_category ||
+        scannedReceipt.suggested_expense_type_name ||
+        scannedReceipt.suggested_new_type_name ||
+        ''
+      ).toLowerCase().trim()
+      const queryTerm = (scannedReceipt.merchant || scannedReceipt.note || '').toLowerCase().trim()
+
+      const match = selectableTypes.find((t) => {
+        const tName = t.name.toLowerCase()
+        const tCat = (t.category || '').toLowerCase()
+        if (categoryTerm && (tCat === categoryTerm || tName.includes(categoryTerm))) return true
+        if (!queryTerm) return false
+        return (
+          tName.includes(queryTerm) ||
+          queryTerm.includes(tName) ||
+          (queryTerm.includes('swiggy') && (tCat.includes('food') || tName.includes('food'))) ||
+          (queryTerm.includes('zomato') && (tCat.includes('food') || tName.includes('food'))) ||
+          (queryTerm.includes('chai') && (tName.includes('food') || tCat.includes('food'))) ||
+          (queryTerm.includes('lunch') && (tName.includes('food') || tCat.includes('food'))) ||
+          (queryTerm.includes('fuel') && (tName.includes('fuel') || tCat.includes('travel'))) ||
+          (queryTerm.includes('uber') && (tCat.includes('travel') || tName.includes('travel'))) ||
+          (queryTerm.includes('ola') && (tCat.includes('travel') || tName.includes('travel'))) ||
+          (queryTerm.includes('grocer') && (tCat.includes('food') || tCat.includes('shop') || tName.includes('grocer')))
+        )
+      })
+
+      if (match) {
+        setValue('expense_type_id', String(match.id), { shouldValidate: true })
+        return
+      }
+
+      // Fourth, if "Other" category exists, prefer it, otherwise use first available type
+      const otherType = selectableTypes.find((t) => (t.category || '').toLowerCase() === 'other' || t.name.toLowerCase() === 'other')
+      setValue('expense_type_id', String((otherType ?? selectableTypes[0]).id), { shouldValidate: true })
+      return
+    }
+
+    // 2. If prefill is present:
+    if (prefill) {
+      if (prefill.initialTypeId && selectableTypes.some((t) => t.id === prefill.initialTypeId)) {
+        setValue('expense_type_id', String(prefill.initialTypeId), { shouldValidate: true })
+        return
+      }
+      const queryTerm = (prefill.merchant || prefill.note || '').toLowerCase()
+      if (queryTerm) {
+        const match = selectableTypes.find((t) => {
+          const tName = t.name.toLowerCase()
+          const tCat = (t.category || '').toLowerCase()
+          return (
+            tName.includes(queryTerm) ||
+            queryTerm.includes(tName) ||
+            (queryTerm.includes('chai') && (tName.includes('food') || tCat.includes('food'))) ||
+            (queryTerm.includes('lunch') && (tName.includes('food') || tCat.includes('food'))) ||
+            (queryTerm.includes('fuel') && (tName.includes('fuel') || tName.includes('trans') || tCat.includes('travel'))) ||
+            (queryTerm.includes('grocer') && (tName.includes('grocer') || tCat.includes('food') || tCat.includes('shop')))
+          )
+        })
+        if (match) {
+          setValue('expense_type_id', String(match.id), { shouldValidate: true })
+          return
+        }
+      }
+      setValue('expense_type_id', String(selectableTypes[0].id), { shouldValidate: true })
     }
   }, [expense, scannedReceipt, prefill, selectableTypes, setValue, watch])
 
   const onSubmit = handleSubmit(async (values) => {
     const amountPaise = parseRupeesToPaise(values.amount)
-    if (!amountPaise) return
+    if (!amountPaise || amountPaise <= 0) {
+      setFormError('Please enter a valid amount greater than ₹0.')
+      return
+    }
+    const typeId = Number(values.expense_type_id)
+    if (!typeId || isNaN(typeId) || typeId <= 0) {
+      setFormError('Please select an expense type.')
+      return
+    }
     setFormError(null)
 
     const payload = {
-      expense_type_id: Number(values.expense_type_id),
+      expense_type_id: typeId,
       account_id: values.account_id && Number(values.account_id) > 0 ? Number(values.account_id) : null,
       amount_paise: amountPaise,
       expense_date: values.expense_date,
-      note: values.note ? values.note.trim() || null : null,
+      note: values.note ? values.note.trim().slice(0, 500) || null : null,
       payment_method: (values.payment_method || null) as PaymentMethod | null,
-      merchant: values.merchant ? values.merchant.trim() || null : null,
+      merchant: values.merchant ? values.merchant.trim().slice(0, 120) || null : null,
     }
 
     try {
@@ -441,7 +519,13 @@ export function ExpenseForm({
         onClose()
         return
       }
-      setFormError(error instanceof Error ? error.message : 'Could not save the expense.')
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Could not save the expense.'
+      setFormError(message)
     }
   })
 
@@ -481,39 +565,20 @@ export function ExpenseForm({
   // Fallback type confirmation rendered inside the form when a scanned receipt
   // proposes a brand-new type that was not already handled by the dialog
   // provider (belt-and-suspenders so the user is always offered to confirm).
-  const handleCreateTypeFromForm = useCallback(async (newTypeId: number) => {
-    setTypeConfirmationOpen(false)
-    setValue('expense_type_id', String(newTypeId), { shouldValidate: true })
-    showToast({
-      title: 'Expense type created',
-      description: 'The new type is selected for this expense.',
-      variant: 'success',
-    })
-    // Submit the form to create the expense with the newly created type
-    const amountValue = watch('amount')
-    const parsedAmount = parseRupeesToPaise(amountValue || '')
-    if (!parsedAmount) return
-    handleSubmit(async (values) => {
-      const amountPaise = parseRupeesToPaise(values.amount)
-      if (!amountPaise) return
-      const payload = {
-        expense_type_id: Number(values.expense_type_id),
-        account_id: values.account_id && Number(values.account_id) > 0 ? Number(values.account_id) : null,
-        amount_paise: amountPaise,
-        expense_date: values.expense_date,
-        note: values.note ? values.note.trim() || null : null,
-        payment_method: (values.payment_method || null) as PaymentMethod | null,
-        merchant: values.merchant ? values.merchant.trim() || null : null,
-      }
-      if (expense) {
-        await api.updateExpense(expense.id, payload)
-        showToast({ title: 'Expense updated', description: 'Your dashboard has been refreshed.' })
-      } else {
-        await api.createExpense(payload)
-        showToast({ title: 'Expense saved', description: 'Your dashboard has been refreshed.' })
-      }
-    })()
-  }, [setTypeConfirmationOpen, setValue, showToast, watch, handleSubmit, parseRupeesToPaise, expense, api])
+  const handleCreateTypeFromForm = useCallback(
+    async (createdType: ExpenseType) => {
+      setTypeConfirmationOpen(false)
+      setCreatedTypes((prev) => [...prev, createdType])
+      setValue('expense_type_id', String(createdType.id), { shouldValidate: true })
+      invalidate()
+      showToast({
+        title: 'Expense type created',
+        description: `“${createdType.name}” is selected for this expense.`,
+        variant: 'success',
+      })
+    },
+    [setTypeConfirmationOpen, setValue, setCreatedTypes, invalidate, showToast],
+  )
 
   const handleChooseExistingFromForm = useCallback(() => {
     setTypeConfirmationOpen(false)

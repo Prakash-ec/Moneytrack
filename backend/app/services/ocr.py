@@ -82,8 +82,8 @@ class TesseractOCRProvider(BaseOCRProvider):
     def extract_text(self, image_bytes: bytes) -> str:
         if not self.is_available() or self._path is None:
             raise OCRUnavailableError(
-                "Local Tesseract OCR engine was not found on this machine. "
-                "Install Tesseract OCR or paste the receipt text manually."
+                "Local OCR engine is not installed on this server. "
+                "Use Groq AI Vision or paste the receipt text manually."
             )
 
         try:

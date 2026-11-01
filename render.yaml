@@ -12,11 +12,17 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: CORS_ORIGINS
-        value: "https://moneytrack-frontend.onrender.com,https://moneytrack-frontend-g5is.onrender.com,http://localhost:5173,https://localhost,capacitor://localhost"
+        value: "https://moneytrack-frontend.onrender.com,https://moneytrack-frontend-g5is.onrender.com,https://moneytrack-frontend-bujt.onrender.com,http://localhost:5173,https://localhost,capacitor://localhost"
       - key: CORS_ORIGIN_REGEX
         value: "^https://moneytrack-frontend.*\\.onrender\\.com$"
       - key: SERVE_FRONTEND
         value: "false"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_API_KEY_FALLBACK
+        sync: false
+      - key: GROQ_MODEL
+        value: "qwen/qwen3.8-27b"
 
   - type: web
     name: moneytrack-frontend

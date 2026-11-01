@@ -60,33 +60,60 @@ const SmsPlugin = registerPlugin<SmsPluginWeb>('SmsPlugin', {
     Promise.resolve(
       new class SmsPluginWebImpl implements SmsPluginWeb {
         async checkPermissions(): Promise<PermissionStatus> {
+          const auto =
+            typeof window !== 'undefined' &&
+            localStorage.getItem('moneytrack_sms_automation_enabled') === 'true'
+          let notifStatus = 'unsupported'
+          if (typeof window !== 'undefined' && 'Notification' in window) {
+            notifStatus = Notification.permission
+          }
           return {
             receiveSms: 'unsupported',
             readSms: 'unsupported',
-            postNotifications: 'unsupported',
-            automationEnabled: false,
+            postNotifications: notifStatus,
+            automationEnabled: auto,
             notificationsEnabled: true,
-            granted: false,
+            granted: notifStatus === 'granted',
           }
         }
         async requestPermissions(): Promise<PermissionStatus> {
+          let notifStatus = 'unsupported'
+          if (typeof window !== 'undefined' && 'Notification' in window) {
+            try {
+              notifStatus = await Notification.requestPermission()
+            } catch {
+              notifStatus = Notification.permission
+            }
+          }
+          const auto =
+            typeof window !== 'undefined' &&
+            localStorage.getItem('moneytrack_sms_automation_enabled') === 'true'
           return {
             receiveSms: 'unsupported',
             readSms: 'unsupported',
-            postNotifications: 'unsupported',
-            automationEnabled: false,
+            postNotifications: notifStatus,
+            automationEnabled: auto,
             notificationsEnabled: true,
-            granted: false,
+            granted: notifStatus === 'granted',
           }
         }
-        async setAutomationEnabled(): Promise<void> {
-          return
+        async setAutomationEnabled(options: { enabled: boolean }): Promise<void> {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('moneytrack_sms_automation_enabled', String(options.enabled))
+          }
         }
-        async setBackendUrl(): Promise<void> {
-          return
+        async setBackendUrl(options: { url: string }): Promise<void> {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('moneytrack_backend_url', options.url)
+          }
         }
         async getSettings(): Promise<SmsSettings> {
-          return { smsAutomationEnabled: false, backendUrl: '', notificationsEnabled: true }
+          const auto =
+            typeof window !== 'undefined' &&
+            localStorage.getItem('moneytrack_sms_automation_enabled') === 'true'
+          const url =
+            (typeof window !== 'undefined' && localStorage.getItem('moneytrack_backend_url')) || ''
+          return { smsAutomationEnabled: auto, backendUrl: url, notificationsEnabled: true }
         }
         async getPendingTransactions(): Promise<{ items: PendingTransaction[] }> {
           return { items: [] }

@@ -175,17 +175,30 @@ export function SmsReviewPage() {
   }, [rejectConfirm, showToast])
 
   const handleToggleAutomation = useCallback(async () => {
-    if (!settings) return
     setSettingsLoading(true)
     try {
-      await SmsPlugin.setAutomationEnabled({ enabled: !settings.smsAutomationEnabled })
-      await load()
+      const current = settings?.smsAutomationEnabled ?? false
+      const nextEnabled = !current
+      if (nextEnabled) {
+        try {
+          await SmsPlugin.requestPermissions()
+        } catch {
+          // ignore
+        }
+      }
+      await SmsPlugin.setAutomationEnabled({ enabled: nextEnabled })
+      setSettings((prev) => ({
+        smsAutomationEnabled: nextEnabled,
+        backendUrl: prev?.backendUrl ?? '',
+        notificationsEnabled: prev?.notificationsEnabled ?? true,
+      }))
       showToast({
-        title: settings.smsAutomationEnabled ? 'Automation disabled' : 'Automation enabled',
-        description: settings.smsAutomationEnabled
-          ? 'New SMS transactions will no longer be saved automatically.'
-          : 'New SMS transactions will be queued for review.',
+        title: nextEnabled ? 'Automation enabled' : 'Automation disabled',
+        description: nextEnabled
+          ? 'New SMS transactions will be queued for review automatically.'
+          : 'New SMS transactions will no longer be captured automatically.',
       })
+      await load()
     } catch (error) {
       showToast({
         title: 'Could not update setting',
@@ -432,7 +445,6 @@ export function SmsReviewPage() {
               variant={settings?.smsAutomationEnabled ? 'primary' : 'secondary'}
               loading={settingsLoading}
               onClick={handleToggleAutomation}
-              disabled={!settings}
             >
               {settings?.smsAutomationEnabled ? 'Enabled' : 'Enable'}
             </Button>

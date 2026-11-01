@@ -269,6 +269,7 @@ export interface ReceiptParseResult {
   suggested_expense_type_name: string | null
   /** Suggested *new* expense type name when no existing type matches. */
   suggested_new_type_name: string | null
+  suggested_category?: string | null
   confidence: {
     merchant?: number
     date?: number

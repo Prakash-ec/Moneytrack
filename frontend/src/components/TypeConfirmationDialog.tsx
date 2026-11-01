@@ -6,14 +6,15 @@ import { Field, Input, Select } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
 import { api } from '@/services/api'
 import { useToast } from '@/providers/ToastProvider'
-import type { Category, ReceiptParseResult } from '@/types/api'
+import { useDataRefresh } from '@/providers/RefreshProvider'
+import type { Category, ExpenseType, ReceiptParseResult } from '@/types/api'
 import { CATEGORY_OPTIONS } from '@/utils/typeOptions'
 
 interface TypeConfirmationDialogProps {
   open: boolean
   suggestedTypeName: string
   scannedReceipt: ReceiptParseResult | null
-  onCreateType: (newTypeId: number) => void
+  onCreateType: (createdType: ExpenseType) => void
   onChooseExisting: () => void
   onCancel: () => void
 }
@@ -27,6 +28,7 @@ export function TypeConfirmationDialog({
   onCancel,
 }: TypeConfirmationDialogProps) {
   const { showToast } = useToast()
+  const { invalidate } = useDataRefresh()
   const [typeName, setTypeName] = useState(suggestedTypeName)
   const [category, setCategory] = useState<Category>('Other')
   const [creating, setCreating] = useState(false)
@@ -53,12 +55,13 @@ export function TypeConfirmationDialog({
       })
       createRef.current = false
       setCreating(false)
+      invalidate()
       showToast({
         title: 'Expense type created',
         description: `“${created.name}” is ready to use for this expense.`,
         variant: 'success',
       })
-      onCreateType(created.id)
+      onCreateType(created)
     } catch (err) {
       createRef.current = false
       setCreating(false)
@@ -69,7 +72,7 @@ export function TypeConfirmationDialog({
         setError(message)
       }
     }
-  }, [typeName, category, showToast, onCreateType])
+  }, [typeName, category, showToast, invalidate, onCreateType])
 
   const handleChooseExisting = useCallback(() => {
     createRef.current = false

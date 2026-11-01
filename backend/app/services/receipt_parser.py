@@ -100,6 +100,23 @@ class BaseReceiptParser(ABC):
     def parse(self, text: str, existing_types: Sequence[ExpenseType]) -> ReceiptParseResponse:
         pass
 
+    def parse_image(
+        self,
+        image_bytes: bytes,
+        existing_types: Sequence[ExpenseType],
+        scan_mode: str = "both",
+    ) -> ReceiptParseResponse:
+        from app.services.ocr import get_ocr_provider, OCRUnavailableError
+
+        ocr = get_ocr_provider()
+        if ocr.is_available():
+            text = ocr.extract_text(image_bytes)
+            return self.parse(text, existing_types)
+        raise OCRUnavailableError(
+            "Receipt image scanning is unavailable: local OCR is not installed. "
+            "Please paste receipt text manually or enter expenses directly."
+        )
+
 
 class RuleBasedReceiptParser(BaseReceiptParser):
     def parse(self, text: str, existing_types: Sequence[ExpenseType]) -> ReceiptParseResponse:
@@ -488,14 +505,17 @@ class RuleBasedReceiptParser(BaseReceiptParser):
         return None, 0.0
 
 
-_DEFAULT_PARSER: BaseReceiptParser = RuleBasedReceiptParser()
+_DEFAULT_PARSER: BaseReceiptParser | None = None
 
 
 def get_receipt_parser() -> BaseReceiptParser:
+    global _DEFAULT_PARSER
+    if _DEFAULT_PARSER is None:
+        _DEFAULT_PARSER = AIReceiptParser()
     return _DEFAULT_PARSER
 
 
-def set_receipt_parser(parser: BaseReceiptParser) -> None:
+def set_receipt_parser(parser: BaseReceiptParser | None) -> None:
     global _DEFAULT_PARSER
     _DEFAULT_PARSER = parser
 
@@ -859,8 +879,6 @@ class AIReceiptParser(BaseReceiptParser):
             "Please paste receipt text manually or enter expenses directly."
         )
 
-
-_DEFAULT_PARSER: BaseReceiptParser = AIReceiptParser()
 
 _DEFAULT_CLASSIFIER: TypeClassifier = TypeClassifier()
 

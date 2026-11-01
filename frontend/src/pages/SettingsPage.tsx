@@ -157,17 +157,41 @@ export function SettingsPage() {
   }
 
   const handleToggleSmsAutomation = useCallback(async () => {
-    if (!smsSettings) return
     setSmsLoading(true)
     try {
-      await SmsPlugin.setAutomationEnabled({ enabled: !smsSettings.smsAutomationEnabled })
-      await loadSmsSettings()
+      const current = smsSettings?.smsAutomationEnabled ?? false
+      const nextEnabled = !current
+      if (nextEnabled && permissionStatus?.receiveSms !== 'granted') {
+        try {
+          const perm = await SmsPlugin.requestPermissions()
+          setPermissionStatus(perm)
+        } catch {
+          // ignore
+        }
+      }
+      await SmsPlugin.setAutomationEnabled({ enabled: nextEnabled })
+      setSmsSettings((prev) => ({
+        smsAutomationEnabled: nextEnabled,
+        backendUrl: prev?.backendUrl ?? getApiBase(),
+        notificationsEnabled: prev?.notificationsEnabled ?? true,
+      }))
+      showToast({
+        title: nextEnabled ? 'SMS scan enabled' : 'SMS scan disabled',
+        description: nextEnabled
+          ? 'Incoming bank SMS transactions will be scanned and queued for review.'
+          : 'Automatic SMS scanning is now turned off.',
+      })
     } catch {
-      // ignore
+      showToast({
+        title: 'Could not update setting',
+        description: 'Please check your device settings.',
+        variant: 'error',
+      })
     } finally {
       setSmsLoading(false)
+      await loadSmsSettings()
     }
-  }, [smsSettings, loadSmsSettings])
+  }, [smsSettings, permissionStatus, loadSmsSettings, showToast])
 
   const handleRequestSmsPermissions = async () => {
     setRequestingPermission(true)
@@ -571,7 +595,6 @@ export function SettingsPage() {
                 variant={smsSettings?.smsAutomationEnabled ? 'primary' : 'secondary'}
                 loading={smsLoading}
                 onClick={handleToggleSmsAutomation}
-                disabled={!smsSettings}
               >
                 {smsSettings?.smsAutomationEnabled ? 'Enabled' : 'Enable'}
               </Button>
@@ -603,6 +626,50 @@ export function SettingsPage() {
                 ? 'Re-check'
                 : 'Grant Permission'}
             </Button>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-icon">
+                <Bell size={18} />
+              </span>
+              <div className="setting-text">
+                <h3>System notifications permission</h3>
+                <p>Required for instant debit fraud alerts & weekly digest reports</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {permissionStatus?.postNotifications === 'granted' ||
+              (typeof window !== 'undefined' &&
+                'Notification' in window &&
+                Notification.permission === 'granted') ? (
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Granted</span>
+                </span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  loading={requestingPermission}
+                  onClick={async () => {
+                    setRequestingPermission(true)
+                    try {
+                      await SmsPlugin.requestPermissions()
+                      await checkSmsPermissions()
+                      showToast({
+                        title: 'Notification permission requested',
+                        description: 'Please confirm the permission prompt if shown.',
+                      })
+                    } finally {
+                      setRequestingPermission(false)
+                    }
+                  }}
+                >
+                  Enable Notifications
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="setting-row">

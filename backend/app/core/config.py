@@ -30,7 +30,8 @@ class Settings(BaseSettings):
         "http://localhost,"
         "capacitor://localhost,"
         "https://moneytrack-frontend.onrender.com,"
-        "https://moneytrack-frontend-g5is.onrender.com"
+        "https://moneytrack-frontend-g5is.onrender.com,"
+        "https://moneytrack-frontend-bujt.onrender.com"
     )
     allowed_origins: str | None = None
     cors_origin_regex: str | None = r"^https:\/\/moneytrack-frontend.*\.onrender\.com$"
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
     groq_request_timeout: float = 20.0
 
     model_config = SettingsConfigDict(
-        env_file=BACKEND_DIR / ".env",
+        env_file=(BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

@@ -14,7 +14,7 @@ def _clean_optional_text(value: str | None, max_length: int) -> str | None:
     if not cleaned:
         return None
     if len(cleaned) > max_length:
-        raise ValueError(f"Must be {max_length} characters or fewer")
+        cleaned = cleaned[:max_length].strip()
     return cleaned
 
 
@@ -32,10 +32,18 @@ class ExpenseBase(BaseModel):
     def normalize_payment_method(cls, value: object) -> object:
         if value is None or not str(value).strip():
             return None
-        v = str(value).strip()
+        v = str(value).strip().lower()
         for member in PaymentMethod:
-            if member.value.lower() == v.lower():
+            if member.value.lower() == v:
                 return member
+        if "card" in v:
+            return PaymentMethod.DEBIT_CARD
+        if "upi" in v or "gpay" in v or "phonepe" in v or "paytm" in v:
+            return PaymentMethod.UPI
+        if "cash" in v:
+            return PaymentMethod.CASH
+        if any(w in v for w in ("bank", "transfer", "neft", "rtgs", "imps", "net banking")):
+            return PaymentMethod.BANK_TRANSFER
         return value
 
     @field_validator("note")
