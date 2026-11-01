@@ -75,6 +75,7 @@ def get_expense(expense_id: int, db: Session = Depends(get_db)) -> ExpenseRead:
 
 
 @router.patch("/{expense_id}", response_model=ExpenseRead, summary="Edit an expense")
+@router.put("/{expense_id}", response_model=ExpenseRead, summary="Edit an expense (PUT)")
 def update_expense(
     expense_id: int, payload: ExpenseUpdate, db: Session = Depends(get_db)
 ) -> ExpenseRead:

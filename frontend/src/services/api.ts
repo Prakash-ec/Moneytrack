@@ -485,7 +485,7 @@ export const api = {
   createBankAccount: (input: BankAccountCreateInput) =>
     request<BankAccount>('/bank-accounts', jsonBody(input)),
   updateBankAccount: (id: number, input: BankAccountUpdateInput) =>
-    request<BankAccount>(`/bank-accounts/${id}`, { method: 'PUT', ...jsonBody(input) }),
+    request<BankAccount>(`/bank-accounts/${id}`, patchBody(input)),
   deleteBankAccount: (id: number) =>
     request<{ success: boolean; message: string }>(`/bank-accounts/${id}`, { method: 'DELETE' }),
   recalculateAccountBalance: (id: number) =>
@@ -506,7 +506,7 @@ export const api = {
   createIncomeType: (input: IncomeTypeCreateInput) =>
     request<IncomeType>('/income-types', jsonBody(input)),
   updateIncomeType: (id: number, input: IncomeTypeUpdateInput) =>
-    request<IncomeType>(`/income-types/${id}`, { method: 'PUT', ...jsonBody(input) }),
+    request<IncomeType>(`/income-types/${id}`, patchBody(input)),
   deleteIncomeType: (id: number) =>
     request<{ success: boolean; message: string }>(`/income-types/${id}`, { method: 'DELETE' }),
 
@@ -528,7 +528,7 @@ export const api = {
   createIncome: (input: IncomeCreateInput) =>
     request<Income>('/incomes', jsonBody(input)),
   updateIncome: (id: number, input: IncomeUpdateInput) =>
-    request<Income>(`/incomes/${id}`, { method: 'PUT', ...jsonBody(input) }),
+    request<Income>(`/incomes/${id}`, patchBody(input)),
   deleteIncome: (id: number) =>
     request<{ success: boolean; message: string }>(`/incomes/${id}`, { method: 'DELETE' }),
 

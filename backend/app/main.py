@@ -1,5 +1,8 @@
+from contextlib import asynccontextmanager
+import logging
 import mimetypes
 from pathlib import Path
+import re
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,10 +18,49 @@ mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("text/javascript", ".js")
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+logger = logging.getLogger("uvicorn.error")
+
+
+def run_startup_migrations() -> None:
+    """Safely verify and run Alembic migrations on startup.
+    Fails startup clearly if a migration fails, preventing the app from
+    running with an unmigrated or broken schema.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    alembic_ini_path = Path(__file__).resolve().parents[2] / "alembic.ini"
+    if not alembic_ini_path.exists():
+        alembic_ini_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+
+    if alembic_ini_path.exists():
+        try:
+            cfg = Config(str(alembic_ini_path))
+            command.upgrade(cfg, "head")
+            logger.info("Database schema verified and upgraded to latest Alembic revision (head).")
+        except Exception as exc:
+            err_msg = str(exc)
+            if "@" in err_msg:
+                err_msg = re.sub(r"://[^@]+@", "://****:****@", err_msg)
+            logger.error(f"CRITICAL: Alembic startup migration failed: {err_msg}")
+            raise RuntimeError(f"Database migration failed on startup: {err_msg}") from None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    run_startup_migrations()
+    yield
+    try:
+        from app.db.session import engine
+        engine.dispose()
+    except Exception:
+        pass
+
 
 app = FastAPI(
     title="MoneyTrack API",
     version=settings.app_version,
+    lifespan=lifespan,
     description=(
         "Local-first expenditure tracking API. All financial aggregates are calculated "
         "from persisted transactions. Amounts are stored as integer paise.\n\n"
@@ -94,22 +136,39 @@ app.include_router(api_router, prefix=settings.api_prefix)
 def root_health():
     """Root health endpoint for Render health checks, load balancers, and monitoring."""
     db_status = "connected"
+    schema_status = "ready"
+    current_rev = None
     try:
         from app.db.session import SessionLocal
 
         with SessionLocal() as session:
             session.execute(text("SELECT 1"))
-    except Exception:
-        db_status = "unavailable"
+            try:
+                rev_row = session.execute(text("SELECT version_num FROM alembic_version")).first()
+                current_rev = rev_row[0] if rev_row else None
+            except Exception:
+                current_rev = None
+            session.execute(text("SELECT 1 FROM expense_types LIMIT 1"))
+    except Exception as exc:
+        err_msg = str(exc).lower()
+        if "no such table" in err_msg or "does not exist" in err_msg or "undefined_table" in err_msg:
+            db_status = "connected"
+            schema_status = "degraded"
+        else:
+            db_status = "unavailable"
+            schema_status = "unavailable"
 
     dialect = "sqlite" if settings.is_sqlite else "postgresql"
+    is_ok = db_status == "connected" and schema_status == "ready"
     return {
-        "status": "ok" if db_status == "connected" else "degraded",
+        "status": "ok" if is_ok else "degraded",
         "application": settings.app_name,
         "version": settings.app_version,
         "environment": settings.environment,
         "database": db_status,
         "dialect": dialect,
+        "schema_status": schema_status,
+        "current_revision": current_rev,
     }
 
 

@@ -64,6 +64,7 @@ def create_income_type(
 
 
 @router.patch("/{type_id}", response_model=IncomeTypeRead, summary="Update income type")
+@router.put("/{type_id}", response_model=IncomeTypeRead, summary="Update income type (PUT)")
 def update_income_type(
     type_id: int,
     payload: IncomeTypeUpdate,

@@ -53,6 +53,7 @@ def get_account(
 
 
 @router.patch("/{account_id}", response_model=BankAccountRead, summary="Update bank account")
+@router.put("/{account_id}", response_model=BankAccountRead, summary="Update bank account (PUT)")
 def update_account(
     account_id: int,
     payload: BankAccountUpdate,

@@ -42,6 +42,7 @@ def mark_notification_read(
 
 
 @router.post("/read-all", response_model=dict)
+@router.post("/mark-all-read", response_model=dict)
 def mark_all_notifications_read(
     db: Session = Depends(get_db),
 ):

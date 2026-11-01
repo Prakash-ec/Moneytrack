@@ -42,6 +42,7 @@ def get_expense_type(type_id: int, db: Session = Depends(get_db)) -> ExpenseType
 
 
 @router.patch("/{type_id}", response_model=ExpenseTypeRead, summary="Edit an expense type")
+@router.put("/{type_id}", response_model=ExpenseTypeRead, summary="Edit an expense type (PUT)")
 def update_expense_type(
     type_id: int, payload: ExpenseTypeUpdate, db: Session = Depends(get_db)
 ) -> ExpenseTypeRead:

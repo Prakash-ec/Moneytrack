@@ -67,6 +67,7 @@ def get_income(
 
 
 @router.patch("/{income_id}", response_model=IncomeRead, summary="Update income")
+@router.put("/{income_id}", response_model=IncomeRead, summary="Update income (PUT)")
 def update_income(
     income_id: int,
     payload: IncomeUpdate,

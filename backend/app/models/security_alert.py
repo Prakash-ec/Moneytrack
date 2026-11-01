@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -11,7 +11,7 @@ class SecurityAlert(Base):
     id = Column(Integer, primary_key=True, index=True)
     transaction_id = Column(Integer, ForeignKey("expenses.id", ondelete="SET NULL"), nullable=True, index=True)
     account_id = Column(Integer, ForeignKey("bank_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
-    amount_paise = Column(Integer, nullable=False)
+    amount_paise = Column(BigInteger, nullable=False)
     merchant = Column(String(255), nullable=True)
     account_suffix = Column(String(10), nullable=True)
     alert_type = Column(String(50), nullable=False)  # HIGH_AMOUNT, NEW_MERCHANT, RAPID_TXNS, REPEATED_DEBIT, UNREVIEWED_SMS

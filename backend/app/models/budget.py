@@ -66,7 +66,7 @@ class CategoryBudget(Base):
         comment="First day of the budget month"
     )
     category: Mapped[str | None] = mapped_column(
-        String(50), nullable=False,
+        String(50), nullable=False, index=True,
         comment="Expense category name (Food, Travel, etc.)"
     )
     amount_paise: Mapped[int] = mapped_column(

@@ -9,3 +9,5 @@ class HealthRead(BaseModel):
     version: str
     environment: str
     database: Literal["connected", "unavailable"]
+    schema_status: Literal["ready", "degraded", "unavailable"] = "ready"
+    current_revision: str | None = None
