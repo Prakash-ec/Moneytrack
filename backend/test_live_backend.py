@@ -199,17 +199,18 @@ def run_tests():
     # Get an existing expense type
     types_res = http_request(f"{LIVE_BASE}/api/expense-types")
     type_id = None
-    if isinstance(types_res["body"], list) and len(types_res["body"]) > 0:
-        type_id = types_res["body"][0]["id"]
+    items = types_res["body"].get("items") if isinstance(types_res["body"], dict) else types_res["body"] if isinstance(types_res["body"], list) else []
+    if items and len(items) > 0:
+        type_id = items[0]["id"]
 
     if type_id:
         create_exp = http_request(
             f"{LIVE_BASE}/api/expenses",
             method="POST",
             data={
-                "type_id": type_id,
+                "expense_type_id": type_id,
                 "amount_paise": 100,
-                "spent_at": "2026-11-01T12:00:00Z",
+                "expense_date": "2026-11-01",
                 "note": "Temporary Automated Test Probe (Will Delete Immediately)",
             },
         )

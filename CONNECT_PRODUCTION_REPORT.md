@@ -3,6 +3,7 @@
 **Date & Time**: 2026-11-01  
 **Project Path**: `D:\MoneyTrack`  
 **GitHub Repository**: `https://github.com/Prakash-ec/Moneytrack` (`branch: main`)  
+**Commit Hash**: `32a69ee`  
 **Production Backend**: `https://moneytrack-backend-g5is.onrender.com`  
 **Production API Base**: `https://moneytrack-backend-g5is.onrender.com/api`  
 **Production Frontend**: `https://moneytrack-frontend-g5is.onrender.com` / `https://moneytrack-frontend.onrender.com`  
