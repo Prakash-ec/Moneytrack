@@ -28,9 +28,12 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173,"
         "https://localhost,"
         "http://localhost,"
-        "capacitor://localhost"
+        "capacitor://localhost,"
+        "https://moneytrack-frontend.onrender.com,"
+        "https://moneytrack-frontend-g5is.onrender.com"
     )
     allowed_origins: str | None = None
+    cors_origin_regex: str | None = r"^https:\/\/moneytrack-frontend.*\.onrender\.com$"
 
     # Optional: mount the built frontend from frontend/dist when present.
     serve_frontend: bool = True

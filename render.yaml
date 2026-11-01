@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: "cd backend && pip install -r requirements.txt"
-    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "cd backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -12,7 +12,9 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: CORS_ORIGINS
-        value: "https://moneytrack-frontend.onrender.com,http://localhost:5173,https://localhost,capacitor://localhost"
+        value: "https://moneytrack-frontend.onrender.com,https://moneytrack-frontend-g5is.onrender.com,http://localhost:5173,https://localhost,capacitor://localhost"
+      - key: CORS_ORIGIN_REGEX
+        value: "^https://moneytrack-frontend.*\\.onrender\\.com$"
       - key: SERVE_FRONTEND
         value: "false"
 
@@ -27,4 +29,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        value: "https://moneytrack-backend.onrender.com/api"
+        value: "https://moneytrack-backend-g5is.onrender.com/api"
