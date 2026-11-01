@@ -18,7 +18,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_url.replace("%", "%%"))
 ensure_sqlite_directory(settings.database_url)
 
 target_metadata = Base.metadata
@@ -43,7 +43,7 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
         connect_args={"check_same_thread": False}
-        if settings.database_url.startswith("sqlite")
+        if settings.is_sqlite
         else {},
     )
 
@@ -52,7 +52,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
-            render_as_batch=settings.database_url.startswith("sqlite"),
+            render_as_batch=settings.is_sqlite,
         )
 
         with context.begin_transaction():

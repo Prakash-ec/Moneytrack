@@ -12,10 +12,19 @@ from app.core.config import settings
 def _engine_kwargs(database_url: str) -> dict:
     if database_url.startswith("sqlite"):
         return {"connect_args": {"check_same_thread": False}}
-    return {"pool_pre_ping": True}
+    # PostgreSQL pool settings optimized for Neon serverless & Render web services
+    return {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": 10,
+        "max_overflow": 10,
+    }
 
 
-engine = create_engine(settings.database_url, **_engine_kwargs(settings.database_url))
+engine = create_engine(
+    settings.sqlalchemy_database_url,
+    **_engine_kwargs(settings.sqlalchemy_database_url),
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 

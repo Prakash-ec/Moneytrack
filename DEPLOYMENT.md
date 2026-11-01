@@ -1,6 +1,6 @@
 # MoneyTrack — Deployment & Hosting Guide
 
-This guide explains how to host the MoneyTrack FastAPI backend and connect it to the MoneyTrack Android application or web frontend.
+This guide explains how to host the MoneyTrack FastAPI backend on **Render (Free Plan)** using **Neon PostgreSQL (Free Plan)**, migrate historical SQLite records safely, and connect it to the MoneyTrack Android application or web frontend.
 
 ---
 
@@ -12,185 +12,158 @@ This guide explains how to host the MoneyTrack FastAPI backend and connect it to
 │  (Capacitor + React 18 + Vite)  │
 │      [On-Device SMS Parser]     │
 └───────────────┬─────────────────┘
-                │ HTTP / HTTPS JSON API
+                │ HTTPS JSON API
                 ▼
 ┌─────────────────────────────────┐
-│        FastAPI Backend          │
-│    (Uvicorn + SQLAlchemy 2.0)   │
+│   Render Free Web Service       │
+│     (FastAPI + Uvicorn)         │
+│     [Stateless / Auto-scale]    │
 └───────────────┬─────────────────┘
-                │ Direct File Access
+                │ TLS Connection (sslmode=require)
                 ▼
 ┌─────────────────────────────────┐
-│      SQLite Database File       │
-│   (backend/data/moneytrack.db)  │
+│     Neon PostgreSQL 18          │
+│   (Serverless Cloud Database)   │
+│   [Free Plan: 0.5 GiB Storage]  │
 └─────────────────────────────────┘
+
+(Local development continues using SQLite at backend/data/moneytrack.db)
 ```
 
-MoneyTrack uses **local-first** storage. All amounts are stored as integer paise (1 INR = 100 paise) to prevent floating-point rounding errors.
+MoneyTrack uses **local-first** financial data architecture. All amounts are stored as integer paise (1 INR = 100 paise) to prevent floating-point rounding errors.
 
 ---
 
-## 1. Local Testing with Android Device
+## 1. Local Development (SQLite)
 
-### Option A: USB Cable via ADB Reverse (Recommended)
-This is the fastest, zero-configuration method to connect a physical phone or emulator to your development machine.
+When `DATABASE_URL` is omitted or set to a `sqlite:///` path, MoneyTrack defaults to local SQLite storage in `backend/data/moneytrack.db`.
 
-1. Connect your Android phone via USB cable and enable **USB Debugging** in Developer Options.
-2. Verify device connection:
-   ```bash
-   adb devices
-   ```
-3. Forward the backend port from the phone to your computer:
-   ```bash
-   adb reverse tcp:8000 tcp:8000
-   ```
-4. Start the backend:
-   ```powershell
-   .\start-dev.ps1
-   # or manually:
-   cd backend
-   .\.venv\Scripts\Activate.ps1
-   python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-   ```
-5. In the MoneyTrack Android app, open **Settings**:
-   - Tap the preset **USB: http://127.0.0.1:8000/api**
-   - Tap **Test Connection** (should display "Connected: MoneyTrack API v1.0.0")
-   - Tap **Save URL**
-
-### Option B: Local Wi-Fi Network (LAN IP)
-If testing without a USB cable:
-
-1. Ensure your computer and Android phone are connected to the same Wi-Fi router.
-2. Find your computer's local IPv4 address:
-   - Windows: `ipconfig` (e.g., `192.168.1.45`)
-   - Mac/Linux: `ifconfig` or `ip a`
-3. Start the backend bound to all network interfaces:
-   ```bash
-   python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-   ```
-4. Ensure Windows Firewall allows incoming connections on port 8000 for Private Networks.
-5. In the MoneyTrack Android app, open **Settings**:
-   - Enter `http://192.168.1.45:8000/api`
-   - Tap **Test Connection**
-   - Tap **Save URL**
-
----
-
-## 2. Docker Deployment
-
-A production-ready [Dockerfile](file:///D:/MoneyTrack/backend/Dockerfile) is included in `backend/Dockerfile`.
-
-### Build and Run with Docker
-```bash
+```powershell
 cd D:\MoneyTrack\backend
-
-# Build the container image
-docker build -t moneytrack-backend:latest .
-
-# Run with a persistent volume for the SQLite database
-docker run -d \
-  --name moneytrack \
-  -p 8000:8000 \
-  -v moneytrack_data:/app/data \
-  -e CORS_ORIGINS="*" \
-  --restart unless-stopped \
-  moneytrack-backend:latest
+.\.venv\Scripts\Activate.ps1
+python run.py
 ```
 
-### Health Check
-```bash
-curl http://localhost:8000/health
-# Expected: {"status":"ok","database":"connected","version":"1.0.0"}
+The API starts on `0.0.0.0:8000` with `/health` and `/api/health` available.
+
+---
+
+## 2. Neon PostgreSQL Configuration (Production)
+
+1. Sign in to your [Neon Console](https://console.neon.tech).
+2. Create a new project (e.g. `moneytrack`).
+3. Under **Dashboard > Connection Details**, copy your connection string:
+   ```text
+   postgresql://neondb_owner:YOUR_PASSWORD@ep-xxx.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require
+   ```
+4. Notes on driver prefixes:
+   - MoneyTrack automatically translates `postgres://` and `postgresql://` into `postgresql+psycopg2://` at runtime.
+   - `sslmode=require` is enforced for encrypted cloud connections.
+   - Serverless connection pool settings (`pool_pre_ping=True`, `pool_recycle=300`) are pre-configured in `app/db/session.py`.
+
+---
+
+## 3. Safe SQLite-to-PostgreSQL Data Migration
+
+MoneyTrack includes a standalone, non-destructive migration script: [migrate_sqlite_to_postgres.py](file:///D:/MoneyTrack/backend/migrate_sqlite_to_postgres.py).
+
+### Safety Guarantees:
+- **Zero SQLite Modifications**: SQLite is opened in strict read-only mode (`mode=ro`). The file is never altered or deleted.
+- **Dependency Ordering**: Tables are inserted in strict foreign key order (`expense_types`, `bank_accounts`, `expenses`, `income_types`, `incomes`, `account_transfers`, `bank_balance_snapshots`, `budgets`, `category_budgets`, `expense_idempotency_keys`, `security_alerts`, `notification_logs`, `user_preferences`).
+- **Boolean Type Casting**: SQLite integer flags (0/1) are cast to native PostgreSQL booleans.
+- **Sequence Synchronization**: All PostgreSQL primary key sequences are advanced to `COALESCE(MAX(id), 1)` so future INSERTs never collide with migrated IDs.
+
+### Step 1: Dry-Run Inspection
+Verify table counts and planned transfers without modifying the target:
+```powershell
+cd D:\MoneyTrack\backend
+.\.venv\Scripts\python.exe migrate_sqlite_to_postgres.py --dry-run
+```
+
+### Step 2: Live Migration to Neon PostgreSQL
+Run the migration with your Neon connection URL:
+```powershell
+cd D:\MoneyTrack\backend
+$env:DATABASE_URL="postgresql://neondb_owner:YOUR_PASSWORD@ep-xxx.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require"
+.\.venv\Scripts\python.exe migrate_sqlite_to_postgres.py
+```
+
+### Step 3: Verify Integrity
+Run verification to confirm exact row count parity:
+```powershell
+.\.venv\Scripts\python.exe migrate_sqlite_to_postgres.py --verify-only
 ```
 
 ---
 
-## 3. Cloud Deployment (Render.com)
+## 4. Cloud Deployment on Render (Free Plan)
 
 A [render.yaml](file:///D:/MoneyTrack/render.yaml) blueprint is provided in the repository root for one-click setup.
 
+### Option A: Render Blueprint (Recommended)
 1. Push your repository to GitHub.
 2. Sign in to [Render](https://render.com) and click **New > Blueprint**.
-3. Select your repository. Render automatically reads `render.yaml`:
-   - Sets runtime to **Python 3.11**
-   - Configures build command: `cd backend && pip install -r requirements.txt`
-   - Configures start command: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - Attaches a **1 GB Persistent Disk** mounted at `/app/backend/data` so your SQLite records survive restarts.
-4. Once deployed, Render provides an HTTPS URL: `https://your-app-name.onrender.com`.
-5. In the MoneyTrack Android app Settings, enter:
-   `https://your-app-name.onrender.com/api`
-   Tap **Test Connection** to confirm connectivity.
+3. Select your `Moneytrack` repository. Render automatically reads `render.yaml`:
+   - Configures Web Service `moneytrack-backend` on Python 3.11 Free plan.
+   - Configures build command: `cd backend && pip install -r requirements.txt`.
+   - Configures start command: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+   - Health check path set to `/health`.
+   - Configures Static Site `moneytrack-frontend` on Free plan.
+4. When prompted by Render for `DATABASE_URL`, paste your Neon connection string:
+   ```text
+   postgresql://neondb_owner:YOUR_PASSWORD@ep-xxx.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require
+   ```
+5. Click **Apply**. Render will build and deploy both services.
+
+### Option B: Manual Web Service Setup
+If not using Blueprints:
+1. Create a new **Web Service** on Render.
+2. Connect your GitHub repository.
+3. Configure the service settings:
+   - **Name**: `moneytrack-backend`
+   - **Region**: Choose closest to your Neon region (e.g. `Ohio` or `Oregon`).
+   - **Runtime**: `Python 3`
+   - **Build Command**: `cd backend && pip install -r requirements.txt`
+   - **Start Command**: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - **Instance Type**: `Free`
+4. Add Environment Variables:
+   - `DATABASE_URL`: Your Neon PostgreSQL connection string.
+   - `CORS_ORIGINS`: `*` (or your frontend domain URL).
+   - `PYTHON_VERSION`: `3.11.9`
+   - `SERVE_FRONTEND`: `false`
+5. Click **Deploy Web Service**.
 
 ---
 
-## 4. VPS Deployment (Ubuntu / Debian + Caddy)
+## 5. Connecting Android App to Render Backend
 
-For running on a Virtual Private Server (DigitalOcean, Hetzner, Linode, AWS EC2):
+1. In Render Dashboard, copy your public backend HTTPS URL:
+   `https://moneytrack-backend.onrender.com`
+2. Open the MoneyTrack app on your Android device.
+3. Go to **Settings > Backend Server URL**.
+4. Enter:
+   `https://moneytrack-backend.onrender.com/api`
+5. Tap **Test Connection**. It should confirm:
+   `Connected: MoneyTrack API v1.0.0`
+6. Tap **Save URL**. All on-device parsed SMS transactions and expense tracking will now sync securely with Neon PostgreSQL.
 
-### 1. Install Dependencies
+---
+
+## 6. Verification & Health Monitoring
+
+Render automatically queries the health check endpoint:
 ```bash
-sudo apt update && sudo apt install -y python3-pip python3-venv tesseract-ocr tesseract-ocr-eng caddy
+curl https://moneytrack-backend.onrender.com/health
 ```
-
-### 2. Set Up Application Directory
-```bash
-sudo mkdir -p /var/www/moneytrack
-sudo chown -R $USER:$USER /var/www/moneytrack
-git clone <your-repo> /var/www/moneytrack
-cd /var/www/moneytrack/backend
-
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-mkdir -p data
-```
-
-### 3. Systemd Service (`/etc/systemd/system/moneytrack.service`)
-```ini
-[Unit]
-Description=MoneyTrack FastAPI Backend
-After=network.target
-
-[Service]
-User=www-data
-Group=www-data
-WorkingDirectory=/var/www/moneytrack/backend
-Environment="PATH=/var/www/moneytrack/backend/.venv/bin"
-Environment="PORT=8000"
-Environment="CORS_ORIGINS=*"
-Environment="DATABASE_URL=sqlite:////var/www/moneytrack/backend/data/moneytrack.db"
-ExecStart=/var/www/moneytrack/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now moneytrack
-```
-
-### 4. Caddy Reverse Proxy (`/etc/caddy/Caddyfile`)
-Caddy automatically provisions free SSL/TLS certificates via Let's Encrypt:
-```caddy
-api.yourdomain.com {
-    reverse_proxy 127.0.0.1:8000
+Response:
+```json
+{
+  "status": "ok",
+  "application": "MoneyTrack",
+  "version": "1.0.0",
+  "environment": "development",
+  "database": "connected",
+  "dialect": "postgresql"
 }
 ```
-Reload Caddy:
-```bash
-sudo systemctl reload caddy
-```
-
-Point your Android app to: `https://api.yourdomain.com/api`.
-
----
-
-## 5. Security & Maintenance Checklist
-
-- [x] **Automated Backups**: Periodically download a full JSON backup from **Settings > Full JSON backup** or copy `moneytrack.db`.
-- [x] **Safe Restorations**: The backend restore endpoint operates in a single ACID transaction with duplicate skipping and foreign key remapping.
-- [x] **CORS Configuration**: Restrict `CORS_ORIGINS` to trusted domains if exposing to the public internet without an authentication proxy.
-- [x] **Camera & OCR**: Mobile browser camera streaming requires HTTPS or `localhost`. The native Android app utilizes device camera intents directly without browser restrictions.
+If Neon compute pauses during idle periods, Render requests will automatically wake up Neon within 1-2 seconds with zero data loss.

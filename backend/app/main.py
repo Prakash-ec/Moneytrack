@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+from sqlalchemy import text
 from app.api.router import api_router
 from app.core.config import settings
 from app.services.errors import ConflictError, NotFoundError, PeriodError
@@ -90,8 +91,25 @@ app.include_router(api_router, prefix=settings.api_prefix)
 
 @app.get("/health", include_in_schema=False)
 def root_health():
-    """Root health endpoint for load balancers, hosting platforms, and API clients."""
-    return {"status": "ok", "application": settings.app_name, "version": settings.app_version}
+    """Root health endpoint for Render health checks, load balancers, and monitoring."""
+    db_status = "connected"
+    try:
+        from app.db.session import SessionLocal
+
+        with SessionLocal() as session:
+            session.execute(text("SELECT 1"))
+    except Exception:
+        db_status = "unavailable"
+
+    dialect = "sqlite" if settings.is_sqlite else "postgresql"
+    return {
+        "status": "ok" if db_status == "connected" else "degraded",
+        "application": settings.app_name,
+        "version": settings.app_version,
+        "environment": settings.environment,
+        "database": db_status,
+        "dialect": dialect,
+    }
 
 
 if FRONTEND_DIST.exists():

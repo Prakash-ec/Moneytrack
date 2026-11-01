@@ -13,12 +13,15 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     environment: str = "development"
     api_prefix: str = "/api"
+    port: int = 8000
+    host: str = "0.0.0.0"
 
     # Default is a local SQLite file stored in backend/data. Override with
-    # DATABASE_URL (for example a PostgreSQL DSN) without touching code.
+    # DATABASE_URL (for example a PostgreSQL DSN on Neon or Render) without touching code.
     database_url: str = f"sqlite:///{(DATA_DIR / 'moneytrack.db').as_posix()}"
 
     # Comma-separated browser and mobile app origins allowed to call the API directly.
+    # Accepts either CORS_ORIGINS or ALLOWED_ORIGINS environment variable.
     # Capacitor on Android serves from https://localhost; Capacitor on iOS serves from capacitor://localhost.
     cors_origins: str = (
         "http://localhost:5173,"
@@ -27,6 +30,7 @@ class Settings(BaseSettings):
         "http://localhost,"
         "capacitor://localhost"
     )
+    allowed_origins: str | None = None
 
     # Optional: mount the built frontend from frontend/dist when present.
     serve_frontend: bool = True
@@ -52,8 +56,28 @@ class Settings(BaseSettings):
     )
 
     @property
+    def sqlalchemy_database_url(self) -> str:
+        """Normalized database URL for SQLAlchemy engine and Alembic migrations.
+
+        PostgreSQL URLs (e.g. from Neon or Render) starting with 'postgres://' or
+        'postgresql://' are safely rewritten to 'postgresql+psycopg2://' to guarantee
+        the correct driver is always used.
+        """
+        raw = self.database_url.strip()
+        if raw.startswith("postgres://"):
+            return raw.replace("postgres://", "postgresql+psycopg2://", 1)
+        if raw.startswith("postgresql://") and not raw.startswith("postgresql+"):
+            return raw.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return raw
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self.database_url.strip().startswith("sqlite")
+
+    @property
     def cors_origin_list(self) -> list[str]:
-        configured = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        raw_origins = self.allowed_origins or self.cors_origins
+        configured = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
         if "*" in configured:
             return ["*"]
         # Mandatory Capacitor mobile and local origins required by MoneyTrack
