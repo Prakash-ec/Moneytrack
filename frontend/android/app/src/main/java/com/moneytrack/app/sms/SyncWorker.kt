@@ -368,10 +368,10 @@ class SyncWorker(context: Context, params: WorkerParameters) :
 
                 if (code in 200 until 300) {
                     val resp = connection.inputStream.use { it.readBytes() }.toString(Charsets.UTF_8)
-                    val idMatch = Regex("""(?i)"entity_id"\s*:\s*(\d+)""").find(resp)
+                    val idMatch = Regex("""(?i)"(?:entity_)?id"\s*:\s*(\d+)""").find(resp)
                     val entityId = idMatch?.groupValues?.get(1)?.toIntOrNull()
-                    val isCreated = resp.contains(""""status":"created"""")
-                    val isReplayed = resp.contains(""""status":"replayed"""")
+                    val isCreated = resp.contains(""""status":"created"""") || resp.contains(""""created":\s*true""") || resp.contains(""""created":true""")
+                    val isReplayed = resp.contains(""""status":"replayed"""") || resp.contains(""""replayed":\s*true""") || resp.contains(""""replayed":true""")
                     SyncResult(
                         created = isCreated,
                         replayed = isReplayed,

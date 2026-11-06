@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+import re
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -89,32 +90,60 @@ def recalculate_account_balance(db: Session, account_id: int) -> int:
 def find_account_by_identifier(
     db: Session, suffix: str | None = None, bank_name: str | None = None
 ) -> BankAccount | None:
-    """Matches an account based on masked suffix (e.g., '8824') and/or bank name."""
+    """Matches an account based on last 4 digits (e.g. '4375') and/or bank name.
+    Matches against account_number_mask and account_name using last 4 digits.
+    """
     query = select(BankAccount).where(BankAccount.is_archived.is_(False))
     accounts = list(db.scalars(query).all())
     if not accounts:
         return None
 
-    clean_suffix = suffix.replace("X", "").replace("x", "").strip() if suffix else ""
+    # Extract target 4 digits from suffix (handles 'XXXXXXXX4375', '4375', 'XX4375', etc.)
+    target_digits = ""
+    if suffix:
+        digits_only = re.sub(r"\D", "", str(suffix))
+        target_digits = digits_only[-4:] if len(digits_only) >= 4 else digits_only
 
-    # 1. Exact suffix and bank match
-    if clean_suffix and bank_name:
+    def extract_4_digits(text: str | None) -> str:
+        if not text:
+            return ""
+        digits = re.sub(r"\D", "", text)
+        return digits[-4:] if len(digits) >= 4 else digits
+
+    # 1. Match by last 4 digits + bank name match
+    if target_digits and bank_name:
+        clean_bank = bank_name.lower().strip()
         for acc in accounts:
-            acc_mask = acc.account_number_mask.replace("X", "").replace("x", "").strip()
-            if acc_mask.endswith(clean_suffix) and bank_name.lower() in acc.bank_name.lower():
+            mask_4 = extract_4_digits(acc.account_number_mask)
+            name_4 = extract_4_digits(acc.account_name)
+            acc_bank = (acc.bank_name or "").lower()
+            acc_name = (acc.account_name or "").lower()
+
+            matches_digits = (mask_4 == target_digits) or (name_4 == target_digits)
+            matches_bank = (
+                clean_bank in acc_bank
+                or acc_bank in clean_bank
+                or clean_bank in acc_name
+            )
+            if matches_digits and matches_bank:
                 return acc
 
-    # 2. Suffix match
-    if clean_suffix:
+    # 2. Match by last 4 digits alone
+    if target_digits:
         for acc in accounts:
-            acc_mask = acc.account_number_mask.replace("X", "").replace("x", "").strip()
-            if acc_mask.endswith(clean_suffix):
+            mask_4 = extract_4_digits(acc.account_number_mask)
+            name_4 = extract_4_digits(acc.account_name)
+            if (mask_4 == target_digits) or (name_4 == target_digits):
                 return acc
 
-    # 3. Bank name match if unique
+    # 3. Match by bank name alone if unique
     if bank_name:
+        clean_bank = bank_name.lower().strip()
         matching_bank = [
-            acc for acc in accounts if bank_name.lower() in acc.bank_name.lower()
+            acc
+            for acc in accounts
+            if clean_bank in (acc.bank_name or "").lower()
+            or (acc.bank_name or "").lower() in clean_bank
         ]
         if len(matching_bank) == 1:
             return matching_bank[0]

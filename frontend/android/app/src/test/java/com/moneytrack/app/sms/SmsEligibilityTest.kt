@@ -33,9 +33,9 @@ class SmsEligibilityTest {
     }
 
     @Test
-    fun `ignored credit`() {
+    fun `ready to sync for complete credit income`() {
         val p = parsed(5000L, TxnStatus.CREDIT, "BANK", "SBI", 1700000000000L)
-        assertEquals(CandidateStatus.IGNORED, SmsEligibility.decide(p, "salary credited").status)
+        assertEquals(CandidateStatus.READY_TO_SYNC, SmsEligibility.decide(p, "salary credited").status)
     }
 
     @Test

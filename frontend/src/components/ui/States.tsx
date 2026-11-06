@@ -201,48 +201,15 @@ export function OfflineBanner() {
   if (!isOffline) return null
 
   return (
-    <div className="sticky top-0 z-50 flex items-center justify-between bg-amber-500/95 px-4 py-2.5 text-xs font-medium text-slate-950 backdrop-blur-md shadow-md">
-      <div className="flex items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-slate-950 animate-ping" />
-        <span>Working Offline: Transactions will queue and sync when connection restores.</span>
-      </div>
+    <div className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-slate-900/90 dark:bg-slate-800/90 backdrop-blur-md px-3.5 py-1.5 text-xs font-medium text-amber-300 border border-amber-500/30 shadow-lg">
+      <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" />
+      <span>Offline mode</span>
     </div>
   )
 }
 
 export function SlowNetworkBanner() {
-  const [show, setShow] = React.useState(false)
-
-  React.useEffect(() => {
-    let timer: any
-    const handleSlow = () => {
-      setShow(true)
-      clearTimeout(timer)
-      timer = setTimeout(() => setShow(false), 6000)
-    }
-    window.addEventListener('moneytrack:slow-network', handleSlow)
-    return () => {
-      window.removeEventListener('moneytrack:slow-network', handleSlow)
-      clearTimeout(timer)
-    }
-  }, [])
-
-  if (!show) return null
-
-  return (
-    <div className="sticky top-0 z-50 flex items-center justify-between bg-sky-600/95 px-4 py-2 text-xs font-medium text-white backdrop-blur-md shadow-md transition-all">
-      <div className="flex items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-sky-200 animate-pulse" />
-        <span>Slow network detected. MoneyTrack is retrying with timeout safeguards.</span>
-      </div>
-      <button
-        onClick={() => setShow(false)}
-        className="text-white/80 hover:text-white px-2 py-0.5 text-xs font-bold"
-      >
-        Dismiss
-      </button>
-    </div>
-  )
+  return null
 }
 
 export function BackendWakingBanner() {
@@ -261,7 +228,7 @@ export function BackendWakingBanner() {
         setWaking(false)
         setRecovered(true)
         clearTimeout(timer)
-        timer = setTimeout(() => setRecovered(false), 2500)
+        timer = setTimeout(() => setRecovered(false), 2000)
       } else {
         setWaking(false)
       }
@@ -276,11 +243,9 @@ export function BackendWakingBanner() {
 
   if (recovered) {
     return (
-      <div className="sticky top-0 z-50 flex items-center justify-between bg-emerald-600/95 px-4 py-2 text-xs font-medium text-white backdrop-blur-md shadow-md transition-all">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-200 animate-pulse" />
-          <span>Connected to MoneyTrack server! Live data synchronized.</span>
-        </div>
+      <div className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-slate-900/90 dark:bg-slate-800/90 backdrop-blur-md px-3.5 py-1.5 text-xs font-medium text-emerald-300 border border-emerald-500/30 shadow-lg transition-all animate-fade-in">
+        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        <span>Connected</span>
       </div>
     )
   }
@@ -288,11 +253,9 @@ export function BackendWakingBanner() {
   if (!waking) return null
 
   return (
-    <div className="sticky top-0 z-50 flex items-center justify-between bg-amber-500/95 px-4 py-2.5 text-xs font-semibold text-slate-950 backdrop-blur-md shadow-md animate-pulse">
-      <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-950" />
-        <span>Connecting to server... (Render instance is waking up from idle, please wait ~20s)</span>
-      </div>
+    <div className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-slate-900/90 dark:bg-slate-800/90 backdrop-blur-md px-3.5 py-1.5 text-xs font-medium text-amber-300 border border-amber-500/30 shadow-lg animate-pulse">
+      <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-400" />
+      <span>Connecting to server...</span>
     </div>
   )
 }

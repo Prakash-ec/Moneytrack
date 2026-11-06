@@ -82,7 +82,7 @@ export function PeriodPicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-32px)] rounded-xl border border-border bg-surface p-2 shadow-2xl backdrop-blur-xl animate-fade-in">
+        <div className="absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-32px)] rounded-lg border border-border bg-surface-raised p-1.5 shadow-lg animate-fade-in">
           <div className="grid gap-1">
             {PERIOD_OPTIONS.map((option) => {
               const selected = preset === option.value

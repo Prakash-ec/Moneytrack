@@ -4,11 +4,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Pencil,
   Plus,
   Receipt,
   Search,
-  Trash2,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -16,7 +14,7 @@ import { useSearchParams } from 'react-router-dom'
 
 import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
-import { Badge } from '@/components/ui/Badge'
+import { TransactionRow } from '@/components/TransactionRow'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
@@ -430,62 +428,13 @@ export function ExpensesPage() {
 
                 <div>
                   {group.items.map((expense) => (
-                    <div key={expense.id} className="transaction-row">
-                      <span
-                        className="transaction-icon"
-                        style={{
-                          backgroundColor: expense.expense_type?.color
-                            ? `${expense.expense_type.color}18`
-                            : undefined,
-                          color: expense.expense_type?.color ?? 'var(--primary)',
-                        }}
-                      >
-                        <Receipt className="h-4 w-4" aria-hidden="true" />
-                      </span>
-
-                      <div className="transaction-main">
-                        <strong>
-                          {expense.merchant || expense.note || expense.expense_type?.name || 'Expense'}
-                        </strong>
-                        {expense.note && expense.merchant && (
-                          <span className="truncate max-w-[200px]">{expense.note}</span>
-                        )}
-                      </div>
-
-                      <div className="transaction-meta">
-                        <Badge tone="neutral">{expense.expense_type?.name ?? 'General'}</Badge>
-                        {expense.payment_method && (
-                          <span className="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded bg-primary-soft text-primary font-medium">
-                            {expense.payment_method}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="transaction-amount">
-                        {formatINR(expense.amount_paise)}
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(expense)}
-                          className="button button-ghost button-icon h-7 w-7 text-muted hover:text-text"
-                          title="Edit expense"
-                          aria-label="Edit expense"
-                        >
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(expense)}
-                          className="button button-ghost button-icon h-7 w-7 text-muted hover:text-danger"
-                          title="Delete expense"
-                          aria-label="Delete expense"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                      </div>
-                    </div>
+                    <TransactionRow
+                      key={expense.id}
+                      expense={expense}
+                      onEdit={openEdit}
+                      onDelete={(item) => setDeleteTarget(item)}
+                      hideDate={false}
+                    />
                   ))}
                 </div>
               </div>

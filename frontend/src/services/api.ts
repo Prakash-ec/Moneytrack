@@ -194,7 +194,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
     let response: Response | null = null
     const targetUrl = `${apiBase()}${path}`
-    const startMs = Date.now()
 
     try {
       const headers: Record<string, string> = {
@@ -209,13 +208,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         headers,
         signal: controller.signal,
       })
-
-      const duration = Date.now() - startMs
-      if (duration > 2500 && typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('moneytrack:slow-network', { detail: { duration, path } })
-        )
-      }
     } catch (err: unknown) {
       clearTimeout(timeoutId)
       const isAbort = err instanceof Error && err.name === 'AbortError'

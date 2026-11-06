@@ -70,11 +70,19 @@ def ingest_sms_transaction(
             )
 
         if not income_type:
-            return SmsIngestResponse(
-                created=False,
-                transaction_type="queued",
-                message="No active income types configured. Transaction queued for review.",
+            # Auto-create "Other Income" type if no active income types exist
+            from app.services.income_types import name_key
+            default_key = name_key("Other Income")
+            income_type = IncomeType(
+                name="Other Income",
+                name_key=default_key,
+                color="#10B981",
+                icon="wallet",
+                is_archived=False,
             )
+            db.add(income_type)
+            db.commit()
+            db.refresh(income_type)
 
         income_create = IncomeCreate(
             income_type_id=income_type.id,
@@ -94,8 +102,10 @@ def ingest_sms_transaction(
         return SmsIngestResponse(
             created=not replayed,
             replayed=replayed,
+            status="replayed" if replayed else "created",
             transaction_type="income",
             id=income.id,
+            entity_id=income.id,
             account_id=account_id,
             account_name=account_name,
             available_balance_recorded=balance_recorded,
@@ -154,8 +164,10 @@ def ingest_sms_transaction(
         return SmsIngestResponse(
             created=not replayed,
             replayed=replayed,
+            status="replayed" if replayed else "created",
             transaction_type="expense",
             id=expense.id,
+            entity_id=expense.id,
             account_id=account_id,
             account_name=account_name,
             available_balance_recorded=balance_recorded,

@@ -43,15 +43,12 @@ object SmsEligibility {
         if (parsed.status == TxnStatus.FAILED || parsed.status == TxnStatus.REVERSAL) {
             return Decision(CandidateStatus.IGNORED, "Failed, declined, cancelled or reversed transaction")
         }
-        if (parsed.status == TxnStatus.CREDIT) {
-            return Decision(CandidateStatus.IGNORED, "Incoming credit / salary / refund / cashback")
-        }
-        if (parsed.status == TxnStatus.UNKNOWN && !isDebitLikely(text, parsed)) {
-            return Decision(CandidateStatus.IGNORED, "No evidence of a completed debit")
+        if (parsed.status == TxnStatus.UNKNOWN && !isDebitLikely(text, parsed) && !isCreditLikely(text, parsed)) {
+            return Decision(CandidateStatus.IGNORED, "No evidence of a completed transaction")
         }
 
         // Balance-only alert without a new transaction event.
-        if (isBalanceOnly(text) && parsed.status != TxnStatus.DEBIT) {
+        if (isBalanceOnly(text) && parsed.status != TxnStatus.DEBIT && parsed.status != TxnStatus.CREDIT) {
             return Decision(CandidateStatus.IGNORED, "Balance-only alert with no new transaction")
         }
 
@@ -77,7 +74,14 @@ object SmsEligibility {
             return Decision(CandidateStatus.PENDING_REVIEW, "Transaction status is ambiguous or pending")
         }
 
-        return Decision(CandidateStatus.READY_TO_SYNC, "Completed debit eligible for auto-recording")
+        val reason = if (parsed.status == TxnStatus.CREDIT) "Completed credit eligible for income auto-recording"
+                     else "Completed debit eligible for auto-recording"
+        return Decision(CandidateStatus.READY_TO_SYNC, reason)
+    }
+
+    private fun isCreditLikely(text: String, parsed: ParsedTransaction): Boolean {
+        val creditWords = listOf("credited", "received", "refund", "salary", "cashback", "deposited")
+        return creditWords.any { text.contains(it) }
     }
 
     private fun isDebitLikely(text: String, parsed: ParsedTransaction): Boolean {

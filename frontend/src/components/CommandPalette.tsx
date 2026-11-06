@@ -244,17 +244,28 @@ export function CommandPalette({
     }
 
     if (matchingExpenses.length > 0) {
-      const expenseItems: CommandItem[] = matchingExpenses.map((exp) => ({
-        id: `exp-${exp.id}`,
-        title: exp.merchant || exp.note || exp.expense_type?.name || 'Expense',
-        subtitle: `${formatDate(exp.expense_date)} · ${formatINR(exp.amount_paise)} · ${exp.expense_type?.name ?? 'General'}`,
-        icon: Receipt,
-        category: 'Transactions',
-        action: () => {
-          onClose()
-          openEdit(exp)
-        },
-      }))
+      const expenseItems: CommandItem[] = matchingExpenses.map((exp) => {
+        const details = [
+          exp.merchant,
+          formatDate(exp.expense_date),
+          formatINR(exp.amount_paise),
+          exp.note ? `Note: "${exp.note}"` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+
+        return {
+          id: `exp-${exp.id}`,
+          title: exp.expense_type?.name || 'Expense',
+          subtitle: details,
+          icon: Receipt,
+          category: 'Transactions',
+          action: () => {
+            onClose()
+            openEdit(exp)
+          },
+        }
+      })
       return [...list, ...expenseItems]
     }
 

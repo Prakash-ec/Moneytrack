@@ -30,7 +30,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { CommandPalette } from '@/components/CommandPalette'
 import { useExpenseDialog } from '@/components/ExpenseDialogProvider'
 import { Modal } from '@/components/ui/Modal'
-import { BackendWakingBanner, OfflineBanner, SlowNetworkBanner } from '@/components/ui/States'
+import { BackendWakingBanner, OfflineBanner } from '@/components/ui/States'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { useDataRefresh } from '@/providers/RefreshProvider'
 import { useTheme } from '@/providers/ThemeProvider'
@@ -439,9 +439,12 @@ export function AppLayout() {
 
   return (
     <div className="app-shell">
-      <BackendWakingBanner />
-      <OfflineBanner />
-      <SlowNetworkBanner />
+      {/* Floating status pills at top center - never disrupts flex layout */}
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1.5 pointer-events-none">
+        <BackendWakingBanner />
+        <OfflineBanner />
+      </div>
+
       <a
         href="#main-content"
         className="sr-only z-[100] rounded-lg bg-primary px-3 py-2 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4"

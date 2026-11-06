@@ -22,8 +22,10 @@ class SmsIngestRequest(BaseModel):
 class SmsIngestResponse(BaseModel):
     created: bool
     replayed: bool = False
+    status: str = "created"
     transaction_type: Literal["expense", "income", "transfer", "queued", "ignored"]
     id: int | None = None
+    entity_id: int | None = None
     account_id: int | None = None
     account_name: str | None = None
     available_balance_recorded: bool = False

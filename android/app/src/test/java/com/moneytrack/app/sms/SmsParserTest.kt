@@ -277,4 +277,43 @@ Transaction ID : BR000D0ABTKT
         assertEquals("ICICI Bank", parsed.bankName)
         assertEquals("Cashback", parsed.categorySuggestion)
     }
+
+    @Test
+    fun `parses SDCCB debit message with concatenated balance date and extracts 4-digit suffix`() {
+        val body = "Your Account XXX924375 is debited by Rs. 19 Total Balance : Rs. 6,847.09 Clear Balance : Rs. 6,847.0928/10/2026:19:29"
+        val parsed = SmsParser.parse(body, "AX-SDCCBL-S", 1700000000000L)
+
+        assertEquals(TxnStatus.DEBIT, parsed.status)
+        assertEquals(1900L, parsed.amountPaise)
+        assertEquals(684709L, parsed.availableBalancePaise)
+        assertEquals("4375", parsed.accountSuffix)
+        assertEquals("Salem District Central Co-operative Bank", parsed.bankName)
+        assertEquals("2026-10-28", parsed.transactionDate)
+    }
+
+    @Test
+    fun `parses SDCCB credit message with balance and extracts 4-digit suffix`() {
+        val body = "Your Account XXX924375 is credited by Rs. 40 Total Balance : Rs. 6,137.09 Clear Balance : Rs. 6,137.09 05/11/2026:20:07"
+        val parsed = SmsParser.parse(body, "AX-SDCCBL-S", 1700000000000L)
+
+        assertEquals(TxnStatus.CREDIT, parsed.status)
+        assertEquals(4000L, parsed.amountPaise)
+        assertEquals(613709L, parsed.availableBalancePaise)
+        assertEquals("4375", parsed.accountSuffix)
+        assertEquals("Salem District Central Co-operative Bank", parsed.bankName)
+        assertEquals("2026-11-05", parsed.transactionDate)
+    }
+
+    @Test
+    fun `parses SDCCB compound debit and credited to beneficiary without picking wrong account or credit status`() {
+        val body = "Your a/c no. XXXXXXXX4375 is debited for Rs.19.00 on 28-10-26 and credited to a/c no. XXXXXXXX2063 (UPI Ref no 131998778089) - SDCCB"
+        val parsed = SmsParser.parse(body, "JM-SDCCBL-S", 1700000000000L)
+
+        assertEquals(TxnStatus.DEBIT, parsed.status)
+        assertEquals(1900L, parsed.amountPaise)
+        assertEquals("4375", parsed.accountSuffix) // Picks user account 4375, NOT counterparty 2063
+        assertEquals("131998778089", parsed.reference)
+        assertEquals("2026-10-28", parsed.transactionDate)
+        assertEquals("Salem District Central Co-operative Bank", parsed.bankName)
+    }
 }

@@ -24,7 +24,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useToast } from '@/providers/ToastProvider'
 import { api } from '@/services/api'
 import { SmsPlugin, type PendingTransaction, type SmsSettings } from '@/services/sms'
-import type { ExpenseType } from '@/types/api'
+import type { ExpenseType, IncomeType } from '@/types/api'
 import { formatDate } from '@/utils/dates'
 
 function CardSkeleton() {
@@ -118,19 +118,43 @@ export function SmsReviewPage() {
           const item = items.find((i) => i.id === id)
           if (item && item.amount) {
             const paise = Math.round(parseFloat(item.amount) * 100)
-            const type =
-              expenseTypes.find(
-                (t) => t.name.toLowerCase() === item.category.toLowerCase(),
-              ) || expenseTypes[0]
-            if (type) {
-              await api.createExpense({
-                amount_paise: paise,
-                expense_date: item.date || new Date().toISOString().slice(0, 10),
-                expense_type_id: type.id,
-                merchant: item.merchant || 'Unrecognised merchant',
-                note: item.note || 'Authorised SMS transaction',
-                payment_method: 'UPI',
-              })
+            const isCredit =
+              item.reason?.toLowerCase().includes('credit') ||
+              item.note?.toLowerCase().includes('credit') ||
+              item.category?.toLowerCase() === 'salary' ||
+              item.category?.toLowerCase() === 'income'
+
+            if (isCredit) {
+              const incomeTypes = await api.listIncomeTypes().catch(() => [] as IncomeType[])
+              const type =
+                incomeTypes.find(
+                  (t: IncomeType) => t.name.toLowerCase() === item.category.toLowerCase(),
+                ) || incomeTypes[0]
+              if (type) {
+                await api.createIncome({
+                  amount_paise: paise,
+                  income_date: item.date || new Date().toISOString().slice(0, 10),
+                  income_type_id: type.id,
+                  payer: item.merchant || 'Auto-credit via SMS',
+                  note: item.note || 'Authorised SMS credit',
+                  payment_method: 'UPI',
+                })
+              }
+            } else {
+              const type =
+                expenseTypes.find(
+                  (t) => t.name.toLowerCase() === item.category.toLowerCase(),
+                ) || expenseTypes[0]
+              if (type) {
+                await api.createExpense({
+                  amount_paise: paise,
+                  expense_date: item.date || new Date().toISOString().slice(0, 10),
+                  expense_type_id: type.id,
+                  merchant: item.merchant || 'Unrecognised merchant',
+                  note: item.note || 'Authorised SMS transaction',
+                  payment_method: 'UPI',
+                })
+              }
             }
           }
         }

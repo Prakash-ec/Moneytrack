@@ -36,9 +36,9 @@ object SmsParser {
     private val NO_DEBIT_EVIDENCE = listOf("no debit", "no amount debited", "not debited", "amount not debited")
 
     // ---------------------------------------------------------------- amount
-    // Matches explicit balance clauses like "Avail Bal: Rs. 15,200.00", "Bal INR 8,900.00", "ac bal: 5000"
+    // Matches explicit balance clauses like "Total Balance : Rs. 6,847.09", "Clear Balance : Rs. 6,847.0928/10/2026", "Avail Bal: Rs. 15,200.00", "Bal INR 8,900.00"
     private val BALANCE_AMOUNT_REGEX = Regex(
-        "(?i)(?:avail(?:able)?\\s*bal(?:ance)?|ac(?:count)?\\s*bal(?:ance)?|a/c\\s*bal(?:ance)?|bal(?:ance)?\\s*(?:is|:|=)|current\\s*bal(?:ance)?|cleared\\s*bal(?:ance)?)\\s*[:=]?\\s*(?:₹|rs\\.?|inr|rupees?)?\\s*([0-9][0-9,]*\\.?[0-9]{0,2})"
+        "(?i)(?:total\\s*bal(?:ance)?|clear(?:ed)?\\s*bal(?:ance)?|avail(?:able)?\\s*bal(?:ance)?|ac(?:count)?\\s*bal(?:ance)?|a/c\\s*bal(?:ance)?|bal(?:ance)?\\s*(?:is|:|=)|current\\s*bal(?:ance)?)\\s*[:=]?\\s*(?:₹|rs\\.?|inr|rupees?)?\\s*([0-9][0-9,]*\\.[0-9]{2}|[0-9][0-9,]*)"
     )
 
     // Debit amount patterns that explicitly associate an amount with a debit / spend / payment action
@@ -59,9 +59,12 @@ object SmsParser {
     )
 
     private val ACCOUNT_SUFFIX_PATTERNS = listOf(
-        Regex("(?i)(?:a/c|acct?|account|card)\\s*(?:no\\.?)?\\s*(?:ending\\s*(?:with)?)?\\s*[:=]?\\s*[*Xx]*([0-9]{3,4})\\b"),
-        Regex("(?i)\\b[*Xx]{2,}([0-9]{3,4})\\b"),
-        Regex("(?i)(?:from|to|in)\\s+(?:a/c|account)\\s*[*Xx]*([0-9]{3,4})\\b")
+        // Prioritize explicit "your/my a/c [no] XXXXXXXX1234" or "Your Account XXX924375"
+        Regex("(?i)(?:your|my)\\s+(?:a/c|acct?|account|card)\\s*(?:no\\.?)?\\s*(?:ending\\s*(?:with)?)?\\s*[:=]?\\s*[*Xx]*([0-9]{3,18})\\b"),
+        Regex("(?i)(?:a/c|acct?|account|card)\\s*(?:no\\.?)?\\s*(?:ending\\s*(?:with)?)?\\s*[:=]?\\s*[*Xx]*([0-9]{3,18})\\b"),
+        Regex("(?i)\\b[*Xx]{2,}([0-9]{3,18})\\b"),
+        Regex("(?i)(?:from|in)\\s+(?:a/c|account)\\s*[*Xx]*([0-9]{3,18})\\b"),
+        Regex("(?i)(?:to)\\s+(?:a/c|account)\\s*[*Xx]*([0-9]{3,18})\\b")
     )
 
     private val CURRENCY_AMOUNT = Regex(
@@ -79,8 +82,8 @@ object SmsParser {
 
     // ---------------------------------------------------------------- reference
     private val REFERENCE_PATTERNS = listOf(
-        Regex("(?i)(?:transaction\\s*(?:id|no|number)|txn\\s*(?:id|no)|txnid|reference|ref)\\s*[:=]?\\s*([A-Za-z0-9]{4,})"),
-        Regex("(?i)(?:upi\\s*(?:ref|reference|id)|upi\\s*txn)\\s*[:=]?\\s*([A-Za-z0-9]{4,})"),
+        Regex("(?i)(?:transaction\\s*(?:id|no|number)|txn\\s*(?:id|no|number)?|txnid|reference|ref)\\s*(?:no\\.?|num(?:ber)?)?\\s*[:=]?\\s*([A-Za-z0-9]{4,})"),
+        Regex("(?i)(?:upi\\s*(?:ref|reference|id|txn)?)\\s*(?:no\\.?|num(?:ber)?)?\\s*[:=]?\\s*([A-Za-z0-9]{4,})"),
         Regex("\\b([A-Z]{2,}[0-9]{6,})\\b"),
     )
 
@@ -93,8 +96,10 @@ object SmsParser {
         Regex("(?i)(?:date|dated|on|at)\\s*[:=]?\\s*([0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{2,4})"),
         // Standalone textual month: 28-OCT-26, 28-Oct-2026, 28Oct26, 28 Oct 2026
         Regex("(?i)\\b([0-9]{1,2}(?:[-/\\s]?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-/\\s]?)[0-9]{2,4})\\b"),
-        // Standalone numeric date: 15-10-2026, 2026-10-28
+        // Standalone numeric date with word boundary: 15-10-2026, 2026-10-28
         Regex("(?i)\\b([0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{2,4})\\b"),
+        // Standalone date without word boundary (handles concatenated dates like '6,847.0928/10/2026:19:29')
+        Regex("(?i)([0-9]{2}[-/][0-9]{2}[-/][0-9]{2,4})"),
         Regex("(?i)\\b([0-9]{4}-[0-9]{2}-[0-9]{2})\\b")
     )
 
@@ -146,9 +151,41 @@ object SmsParser {
         if (NO_DEBIT_EVIDENCE.any { lower.contains(it) }) return TxnStatus.FAILED
         if (REVERSAL_KEYWORDS.any { lower.contains(it) }) return TxnStatus.REVERSAL
         if (FAILED_KEYWORDS.any { lower.contains(it) }) return TxnStatus.FAILED
-        if (CREDIT_KEYWORDS.any { lower.contains(it) }) return TxnStatus.CREDIT
+
+        // 1. Explicit compound "Your a/c is debited ... and credited to a/c" (very common in Indian UPI/banking like SDCCB)
+        val userDebited = Regex("(?i)(?:your|my)\\s+(?:a/c|account|card)\\s*(?:no\\.?)?\\s*[*Xx0-9]*\\s*(?:is|has been|was)?\\s*(?:debited|spent|deducted)")
+        val userCredited = Regex("(?i)(?:your|my)\\s+(?:a/c|account|card)\\s*(?:no\\.?)?\\s*[*Xx0-9]*\\s*(?:is|has been|was)?\\s*(?:credited|deposited|refunded)")
+
+        if (userDebited.containsMatchIn(text) && !userCredited.containsMatchIn(text)) {
+            return TxnStatus.DEBIT
+        }
+        if (userCredited.containsMatchIn(text) && !userDebited.containsMatchIn(text)) {
+            return TxnStatus.CREDIT
+        }
+
+        // 2. "credited to a/c XXXXXX" when message also contains "debited" -> it means debited from user, credited to beneficiary
+        if (lower.contains("debited") && (lower.contains("credited to a/c") || lower.contains("credited to beneficiary") || lower.contains("credited to vpa") || lower.contains("credited to"))) {
+            return TxnStatus.DEBIT
+        }
+
+        // 3. "credited ... debited from a/c" -> credited to user
+        if (lower.contains("credited") && (lower.contains("debited from a/c") || lower.contains("debited from"))) {
+            return TxnStatus.CREDIT
+        }
+
+        // 4. Clear credit / income keywords when debited is not present
+        if (CREDIT_KEYWORDS.any { lower.contains(it) } && !lower.contains("debited")) {
+            return TxnStatus.CREDIT
+        }
+
         if (PENDING_KEYWORDS.any { lower.contains(it) }) return TxnStatus.PENDING
+
+        // 5. Debit keywords
         if (DEBIT_SUCCESS_KEYWORDS.any { lower.contains(it) }) return TxnStatus.DEBIT
+
+        // 6. Fallback credit check
+        if (CREDIT_KEYWORDS.any { lower.contains(it) }) return TxnStatus.CREDIT
+
         return TxnStatus.UNKNOWN
     }
 
@@ -426,7 +463,9 @@ object SmsParser {
             val mt = pattern.find(text)
             if (mt != null && mt.groupValues.size > 1) {
                 val digits = mt.groupValues[1].trim()
-                if (digits.length in 3..4) {
+                if (digits.length >= 4) {
+                    return digits.takeLast(4)
+                } else if (digits.length == 3) {
                     return digits
                 }
             }
@@ -453,6 +492,7 @@ object SmsParser {
             combined.contains("PAYTM") || combined.contains("PYTM") -> "Paytm Payments Bank"
             combined.contains("AIRTEL") || combined.contains("ATMP") -> "Airtel Payments Bank"
             combined.contains("JIO") -> "Jio Payments Bank"
+            combined.contains("SDCCB") || combined.contains("SDCCBL") -> "Salem District Central Co-operative Bank"
             else -> null
         }
     }

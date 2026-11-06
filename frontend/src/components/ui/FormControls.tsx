@@ -10,7 +10,7 @@ import {
 import { cn } from '@/utils/cn'
 
 const controlBase =
-  'w-full rounded-[1rem] border border-line bg-surface text-sm text-ink shadow-soft outline-none transition-all placeholder:text-subtle focus:border-primary/60 focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50'
+  'w-full rounded-lg border border-line bg-surface text-sm text-ink outline-none transition-colors placeholder:text-subtle focus:border-primary focus:ring-1 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50'
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...props }, ref) {
@@ -19,8 +19,8 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
         ref={ref}
         className={cn(
           controlBase,
-          'h-12 px-3.5',
-          props['aria-invalid'] ? 'border-danger/60 focus:border-danger focus:ring-danger/20' : '',
+          'h-10 px-3',
+          props['aria-invalid'] ? 'border-danger focus:border-danger focus:ring-danger/20' : '',
           className,
         )}
         {...props}
@@ -34,7 +34,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
     return (
       <textarea
         ref={ref}
-        className={cn(controlBase, 'min-h-24 resize-y px-3.5 py-3', className)}
+        className={cn(controlBase, 'min-h-20 resize-y px-3 py-2.5', className)}
         {...props}
       />
     )
@@ -49,9 +49,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
           ref={ref}
           className={cn(
             controlBase,
-            'h-12 appearance-none pl-3.5 pr-10',
+            'h-10 appearance-none pl-3 pr-9',
             props['aria-invalid']
-              ? 'border-danger/70 focus:border-danger focus:ring-danger/10' : '',
+              ? 'border-danger focus:border-danger focus:ring-danger/10' : '',
             className,
           )}
           {...props}
@@ -59,7 +59,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
           {children}
         </select>
         <ChevronDown
-          className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle"
+          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle"
           aria-hidden
         />
       </div>

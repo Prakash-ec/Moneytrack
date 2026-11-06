@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Building2,
   Calendar,
-  Pencil,
   Percent,
   Plus,
   Receipt,
@@ -23,6 +22,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
 import { QuickChipsModal } from '@/components/QuickChipsModal'
 import { StatCard } from '@/components/StatCard'
+import { TransactionRow } from '@/components/TransactionRow'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -497,47 +497,11 @@ export function HomePage() {
 
             <div>
               {recentQuery.data?.items?.map((expense) => (
-                <div key={expense.id} className="transaction-row">
-                  <span
-                    className="transaction-icon"
-                    style={{
-                      backgroundColor: expense.expense_type?.color
-                        ? `${expense.expense_type.color}18`
-                        : undefined,
-                      color: expense.expense_type?.color ?? 'var(--primary)',
-                    }}
-                  >
-                    <Receipt className="h-4 w-4" aria-hidden="true" />
-                  </span>
-
-                  <div className="transaction-main">
-                    <strong>{expense.merchant || expense.note || expense.expense_type?.name || 'Expense'}</strong>
-                    <span>{formatDate(expense.expense_date)}</span>
-                  </div>
-
-                  <div className="transaction-meta">
-                    <Badge tone="neutral">{expense.expense_type?.name ?? 'General'}</Badge>
-                    {expense.payment_method && (
-                      <small>{expense.payment_method}</small>
-                    )}
-                  </div>
-
-                  <div className="transaction-amount">
-                    {formatINR(expense.amount_paise)}
-                  </div>
-
-                  <div className="flex items-center justify-end">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(expense)}
-                      className="button button-ghost button-icon h-7 w-7 text-muted hover:text-text"
-                      title="Edit expense"
-                      aria-label="Edit expense"
-                    >
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
+                <TransactionRow
+                  key={expense.id}
+                  expense={expense}
+                  onEdit={openEdit}
+                />
               ))}
             </div>
           </section>
