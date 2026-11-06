@@ -181,7 +181,7 @@ export function BreakdownPage() {
   return (
     <div className="page pb-20">
       <PageHeader
-        eyebrow="PORTFOLIO & ALLOCATION"
+        eyebrow="Allocation & shares"
         title="Spending breakdown"
         description="Comprehensive category distributions, payment channels, and merchant outflow."
         actions={

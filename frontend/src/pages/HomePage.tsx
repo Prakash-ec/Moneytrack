@@ -6,10 +6,8 @@ import {
   Plus,
   Receipt,
   SlidersHorizontal,
-  Sparkles,
   TrendingUp,
   WalletCards,
-  Zap,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -115,8 +113,8 @@ export function HomePage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="OVERVIEW"
-        title="Where your money went"
+        eyebrow="Overview"
+        title="Financial overview"
         description={`${formatRangeLabel(period.range)} · Asia/Kolkata`}
         actions={
           <div className="flex items-center gap-2">
@@ -157,25 +155,22 @@ export function HomePage() {
 
         <div className="lg:col-span-7 flex flex-col justify-between">
           {/* Quick Expense Logging Chips */}
-          <div className="card p-4 sm:p-5 mb-4">
+          <div className="card p-5 mb-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="p-1 rounded-md bg-primary-soft text-primary">
-                  <Zap className="h-4 w-4" aria-hidden="true" />
-                </span>
-                <span className="text-xs font-bold text-text uppercase tracking-wider">
-                  1-Tap Quick Log
+                <span className="text-xs font-semibold text-text">
+                  Quick record
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-muted hidden sm:inline">Tap to record immediately</span>
+                <span className="text-[11px] text-muted hidden sm:inline">Frequent shortcuts</span>
                 <button
                   type="button"
                   onClick={() => setIsEditChipsOpen(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-raised hover:bg-primary-soft text-[11px] font-semibold text-text hover:text-primary border border-border hover:border-primary/40 transition-colors"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-raised hover:bg-surface text-[11px] font-medium text-text border border-border hover:border-border-strong transition-colors"
                   title="Customize shortcuts and prices"
                 >
-                  <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
+                  <SlidersHorizontal className="h-3 w-3 text-muted" aria-hidden="true" />
                   <span>Edit</span>
                 </button>
               </div>
@@ -193,7 +188,7 @@ export function HomePage() {
                       payment_method: chip.payment_method ? (chip.payment_method as any) : 'UPI',
                     })
                   }
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-surface-raised hover:bg-primary-soft border border-border hover:border-primary/40 text-text hover:text-primary transition-all shrink-0 active:scale-95 shadow-2xs"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-raised hover:bg-surface border border-border hover:border-border-strong text-text transition-colors shrink-0"
                 >
                   <span>{chip.label}</span>
                 </button>
@@ -202,7 +197,7 @@ export function HomePage() {
               <button
                 type="button"
                 onClick={() => setIsEditChipsOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl text-xs font-semibold bg-surface-raised/40 hover:bg-surface-raised border border-dashed border-border hover:border-primary/40 text-muted hover:text-text transition-all shrink-0 active:scale-95"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-raised/50 hover:bg-surface-raised border border-dashed border-border hover:border-border-strong text-muted hover:text-text transition-colors shrink-0"
                 title="Add or edit quick shortcuts"
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -213,43 +208,43 @@ export function HomePage() {
 
           {/* Bank Accounts Mini Strip */}
           {cashflow?.bank_accounts && cashflow.bank_accounts.length > 0 ? (
-            <div className="card p-4 sm:p-5">
-              <div className="flex items-center justify-between mb-2.5">
+            <div className="card p-5">
+              <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="p-1 rounded-md bg-sky-500/10 text-sky-500">
-                    <Building2 className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <span className="text-xs font-bold text-text uppercase tracking-wider">
-                    Linked Bank Accounts ({cashflow.bank_accounts.length})
+                  <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
+                  <span className="text-xs font-semibold text-text">
+                    Linked accounts ({cashflow.bank_accounts.length})
                   </span>
                 </div>
                 <Link
                   to="/bank-accounts"
-                  className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1"
+                  className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
                 >
                   <span>Manage</span>
                   <ArrowRight className="h-3 w-3" aria-hidden="true" />
                 </Link>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {cashflow.bank_accounts.slice(0, 4).map((acc) => (
                   <div
                     key={acc.id}
                     onClick={() => navigate('/bank-accounts')}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-surface-raised border border-border hover:border-primary/30 transition-all cursor-pointer"
+                    className="flex items-center justify-between p-3 rounded-lg bg-surface-raised border border-border hover:border-border-strong transition-colors cursor-pointer"
                   >
                     <div className="min-w-0 pr-2">
-                      <div className="font-semibold text-xs text-text truncate">{acc.name}</div>
+                      <div className="font-medium text-xs text-text truncate">{acc.name}</div>
                       <div className="text-[10px] text-muted flex items-center gap-1">
                         <span>{acc.bank_name}</span>
-                        {acc.account_number_mask && <span>· ••{acc.account_number_mask}</span>}
+                        {acc.account_number_mask && (
+                          <span className="font-mono tabular-nums">· ••{acc.account_number_mask}</span>
+                        )}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="font-mono text-xs font-bold text-text">
+                      <div className="font-mono tabular-nums text-xs font-semibold text-text">
                         {formatINR(acc.current_balance_paise)}
                       </div>
-                      <div className="text-[9px] text-muted uppercase">
+                      <div className="text-[10px] text-muted capitalize">
                         {acc.account_type.replace('_', ' ')}
                       </div>
                     </div>
@@ -259,28 +254,27 @@ export function HomePage() {
             </div>
           ) : (
             /* Spending Velocity & Burn Meter */
-            <div className="card p-4 sm:p-5">
+            <div className="card p-5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-text uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-                  Daily Velocity & Pace
+                <span className="text-xs font-semibold text-text">
+                  Average daily spend
                 </span>
-                <Badge tone="positive">Steady Outflow</Badge>
+                <Badge tone="neutral">Pace</Badge>
               </div>
               <div className="flex items-baseline justify-between mt-1">
                 <div>
-                  <span className="text-2xl font-bold text-text font-display">
+                  <span className="text-2xl font-semibold text-text font-mono tabular-nums">
                     {formatINR(summary?.average_paise ?? 0)}
                   </span>
                   <span className="text-xs text-muted ml-1.5">/ active day</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[11px] text-muted block">Period Average</span>
-                  <span className="text-xs font-semibold text-text">
+                  <span className="text-[11px] text-muted block">Period average</span>
+                  <span className="text-xs font-medium text-text font-mono tabular-nums">
                     {summary && summary.transaction_count > 0
                       ? formatINR(Math.round(summary.total_paise / summary.transaction_count))
                       : '₹0'}
-                    <span className="text-[10px] text-muted ml-1">/ tx</span>
+                    <span className="text-[10px] text-muted ml-1">/ transaction</span>
                   </span>
                 </div>
               </div>
@@ -366,7 +360,7 @@ export function HomePage() {
               <div className="card-header">
                 <div>
                   <h2>By expense type</h2>
-                  <p>Where your money went</p>
+                  <p>Categorized outflow</p>
                 </div>
                 <Link
                   to={`/breakdown?${period.periodSearch}`}
@@ -385,8 +379,8 @@ export function HomePage() {
 
                 {byTypeQuery.data?.items && byTypeQuery.data.items.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-border">
-                    <div className="text-[11px] font-semibold tracking-wider text-muted uppercase mb-2.5">
-                      Top Outflow Shares
+                    <div className="text-[11px] font-medium text-muted mb-2.5">
+                      Top expense shares
                     </div>
                     <div className="space-y-2.5">
                       {byTypeQuery.data.items.slice(0, 3).map((item) => (
@@ -399,13 +393,13 @@ export function HomePage() {
                               />
                               <span className="truncate flex-1">{item.name}</span>
                             </span>
-                            <span className="text-muted font-mono text-[11px] shrink-0">
+                            <span className="text-muted font-mono tabular-nums text-[11px] shrink-0">
                               {formatINR(item.total_paise)} ({item.share_percent.toFixed(0)}%)
                             </span>
                           </div>
                           <div className="h-1.5 w-full bg-border/60 rounded-full overflow-hidden">
                             <div
-                              className="h-full rounded-full transition-all duration-500"
+                              className="h-full rounded-full transition-all duration-300"
                               style={{
                                 width: `${Math.min(100, Math.max(5, item.share_percent))}%`,
                                 backgroundColor: item.color || 'var(--primary)',
@@ -425,7 +419,7 @@ export function HomePage() {
             <div className="card-header">
               <div>
                 <h2>Recent transactions</h2>
-                <p>Your latest recorded expenses</p>
+                <p>Latest recorded activity</p>
               </div>
               <Link
                 to={`/expenses?${period.periodSearch}`}

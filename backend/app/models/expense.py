@@ -23,6 +23,9 @@ class Expense(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     expense_type_id: Mapped[int] = mapped_column(
         ForeignKey("expense_types.id", ondelete="RESTRICT"), nullable=False, index=True
     )

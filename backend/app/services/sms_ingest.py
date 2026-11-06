@@ -17,11 +17,14 @@ from app.services.incomes import create_income
 
 
 def ingest_sms_transaction(
-    db: Session, payload: SmsIngestRequest, idempotency_key: str | None = None
+    db: Session,
+    payload: SmsIngestRequest,
+    idempotency_key: str | None = None,
+    user_id: int | None = None,
 ) -> SmsIngestResponse:
     # 1. Match bank account if suffix or bank name present
     account = find_account_by_identifier(
-        db, suffix=payload.account_suffix, bank_name=payload.bank_name
+        db, suffix=payload.account_suffix, bank_name=payload.bank_name, user_id=user_id
     )
     account_id = account.id if account else None
     account_name = account.account_name if account else None
@@ -40,7 +43,7 @@ def ingest_sms_transaction(
     # Record available balance if present and account identified
     if account and payload.available_balance_paise is not None and payload.available_balance_paise > 0:
         record_reported_balance(
-            db, account.id, payload.available_balance_paise, source="sms"
+            db, account.id, payload.available_balance_paise, source="sms", user_id=user_id
         )
         balance_recorded = True
 
@@ -74,6 +77,7 @@ def ingest_sms_transaction(
             from app.services.income_types import name_key
             default_key = name_key("Other Income")
             income_type = IncomeType(
+                user_id=user_id,
                 name="Other Income",
                 name_key=default_key,
                 color="#10B981",
@@ -96,7 +100,9 @@ def ingest_sms_transaction(
             source="sms",
         )
 
-        income, replayed = create_income(db, income_create, idempotency_key=idempotency_key)
+        income, replayed = create_income(
+            db, income_create, idempotency_key=idempotency_key, user_id=user_id
+        )
         current_bal = recalculate_account_balance(db, account.id) if account else None
 
         return SmsIngestResponse(
@@ -157,7 +163,11 @@ def ingest_sms_transaction(
         )
 
         expense, replayed = create_expense(
-            db, expense_create, idempotency_key=idempotency_key, account_id=account_id
+            db,
+            expense_create,
+            idempotency_key=idempotency_key,
+            account_id=account_id,
+            user_id=user_id,
         )
         current_bal = recalculate_account_balance(db, account.id) if account else None
 

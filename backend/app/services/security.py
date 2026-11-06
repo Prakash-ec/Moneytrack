@@ -64,10 +64,10 @@ def evaluate_transaction_security(db: Session, expense: Expense) -> Optional[Sec
 
     # 1. Check for Unusually High Amount (> ₹15,000 or > 3x 30-day average)
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
-    avg_query = db.query(func.avg(Expense.amount_paise)).filter(
-        Expense.id != expense.id,
-        Expense.created_at >= thirty_days_ago,
-    ).scalar()
+    avg_filter = [Expense.id != expense.id, Expense.created_at >= thirty_days_ago]
+    if expense.user_id is not None:
+        avg_filter.append(Expense.user_id == expense.user_id)
+    avg_query = db.query(func.avg(Expense.amount_paise)).filter(*avg_filter).scalar()
 
     avg_30 = float(avg_query) if avg_query else 50000.0  # default baseline ₹500
     if amount >= 1500000 or (avg_30 > 0 and amount >= 3.0 * avg_30 and amount >= 200000):
@@ -79,10 +79,13 @@ def evaluate_transaction_security(db: Session, expense: Expense) -> Optional[Sec
 
     # 2. Check for New / Unfamiliar Merchant with significant amount (> ₹1,000)
     if expense.merchant and len(expense.merchant.strip()) > 1 and amount >= 100000:
-        prev_merchant_count = db.query(func.count(Expense.id)).filter(
+        merchant_filter = [
             Expense.id != expense.id,
             func.lower(Expense.merchant) == func.lower(expense.merchant.strip()),
-        ).scalar()
+        ]
+        if expense.user_id is not None:
+            merchant_filter.append(Expense.user_id == expense.user_id)
+        prev_merchant_count = db.query(func.count(Expense.id)).filter(*merchant_filter).scalar()
         if prev_merchant_count == 0:
             signals.append((
                 "NEW_MERCHANT",
@@ -93,11 +96,14 @@ def evaluate_transaction_security(db: Session, expense: Expense) -> Optional[Sec
     # 3. Check for Rapid Debits on the same account (multiple within 15 mins)
     if expense.account_id:
         fifteen_mins_ago = (expense.created_at or datetime.now(timezone.utc)) - timedelta(minutes=15)
-        rapid_count = db.query(func.count(Expense.id)).filter(
+        rapid_filter = [
             Expense.id != expense.id,
             Expense.account_id == expense.account_id,
             Expense.created_at >= fifteen_mins_ago,
-        ).scalar() or 0
+        ]
+        if expense.user_id is not None:
+            rapid_filter.append(Expense.user_id == expense.user_id)
+        rapid_count = db.query(func.count(Expense.id)).filter(*rapid_filter).scalar() or 0
         if rapid_count >= 2:
             signals.append((
                 "RAPID_TXNS",
@@ -107,11 +113,14 @@ def evaluate_transaction_security(db: Session, expense: Expense) -> Optional[Sec
 
     # 4. Repeated Similar Debits (same amount in 24 hours)
     twenty_four_hours_ago = (expense.created_at or datetime.now(timezone.utc)) - timedelta(hours=24)
-    repeated_count = db.query(func.count(Expense.id)).filter(
+    rep_filter = [
         Expense.id != expense.id,
         Expense.amount_paise == amount,
         Expense.created_at >= twenty_four_hours_ago,
-    ).scalar() or 0
+    ]
+    if expense.user_id is not None:
+        rep_filter.append(Expense.user_id == expense.user_id)
+    repeated_count = db.query(func.count(Expense.id)).filter(*rep_filter).scalar() or 0
     if repeated_count >= 2:
         signals.append((
             "REPEATED_DEBIT",
@@ -140,6 +149,7 @@ def evaluate_transaction_security(db: Session, expense: Expense) -> Optional[Sec
         return existing
 
     alert = SecurityAlert(
+        user_id=expense.user_id,
         transaction_id=expense.id,
         account_id=expense.account_id,
         amount_paise=expense.amount_paise,
@@ -161,50 +171,39 @@ def evaluate_transaction_security(db: Session, expense: Expense) -> Optional[Sec
         body=reason,
         category="SECURITY",
         reference_id=str(alert.id),
+        user_id=expense.user_id,
     )
 
     return alert
 
 
 def list_security_alerts(
-    db: Session, status: Optional[str] = None, limit: int = 50
+    db: Session,
+    status: Optional[str] = None,
+    limit: int = 50,
+    user_id: Optional[int] = None,
 ) -> List[SecurityAlert]:
     query = db.query(SecurityAlert)
+    if user_id is not None:
+        query = query.filter(SecurityAlert.user_id == user_id)
     if status:
         query = query.filter(SecurityAlert.status == status)
     return query.order_by(desc(SecurityAlert.created_at)).limit(limit).all()
 
 
-def get_security_summary(db: Session) -> SecuritySummary:
-    total = db.query(func.count(SecurityAlert.id)).scalar() or 0
-    needs_review = (
-        db.query(func.count(SecurityAlert.id))
-        .filter(SecurityAlert.status == "NEEDS_REVIEW")
-        .scalar()
-        or 0
-    )
-    disputed = (
-        db.query(func.count(SecurityAlert.id))
-        .filter(SecurityAlert.status == "DISPUTED")
-        .scalar()
-        or 0
-    )
-    resolved = (
-        db.query(func.count(SecurityAlert.id))
-        .filter(SecurityAlert.status == "RESOLVED")
-        .scalar()
-        or 0
-    )
-    recognised = (
-        db.query(func.count(SecurityAlert.id))
-        .filter(SecurityAlert.status == "RECOGNISED")
-        .scalar()
-        or 0
-    )
+def get_security_summary(db: Session, user_id: Optional[int] = None) -> SecuritySummary:
+    base = db.query(SecurityAlert)
+    if user_id is not None:
+        base = base.filter(SecurityAlert.user_id == user_id)
+
+    total = base.count()
+    needs_review = base.filter(SecurityAlert.status == "NEEDS_REVIEW").count()
+    disputed = base.filter(SecurityAlert.status == "DISPUTED").count()
+    resolved = base.filter(SecurityAlert.status == "RESOLVED").count()
+    recognised = base.filter(SecurityAlert.status == "RECOGNISED").count()
 
     recent = (
-        db.query(SecurityAlert)
-        .order_by(desc(SecurityAlert.created_at))
+        base.order_by(desc(SecurityAlert.created_at))
         .limit(10)
         .all()
     )
@@ -220,9 +219,16 @@ def get_security_summary(db: Session) -> SecuritySummary:
 
 
 def action_security_alert(
-    db: Session, alert_id: int, action: str, dispute_reason: Optional[str] = None
+    db: Session,
+    alert_id: int,
+    action: str,
+    dispute_reason: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> SecurityActionResponse:
-    alert = db.query(SecurityAlert).filter(SecurityAlert.id == alert_id).first()
+    query = db.query(SecurityAlert).filter(SecurityAlert.id == alert_id)
+    if user_id is not None:
+        query = query.filter(SecurityAlert.user_id == user_id)
+    alert = query.first()
     if not alert:
         raise ValueError(f"Security alert {alert_id} not found")
 

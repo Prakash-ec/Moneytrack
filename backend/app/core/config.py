@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     keep_alive_interval_minutes: int = 12
     keep_alive_url: str | None = None
 
+    # Authentication and security configuration
+    secret_key: str = "moneytrack-insecure-default-change-in-production-secret-key-32chars"
+    access_token_expire_minutes: int = 60 * 24 * 30  # 30 days
+    auth_required: bool = True
+
+    # SQL performance profiling (development-only, disabled by default in production)
+    sql_profiling_enabled: bool = False
+    slow_query_threshold_ms: float = 50.0
+
     model_config = SettingsConfigDict(
         env_file=(BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env"),
         env_file_encoding="utf-8",

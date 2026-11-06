@@ -1,3 +1,4 @@
+from app.models.user import User
 from app.models.bank_account import BankAccount
 from app.models.income_type import IncomeType
 from app.models.income import Income
@@ -12,6 +13,7 @@ from app.models.notification_log import NotificationLog
 from app.models.user_preference import UserPreference
 
 __all__ = [
+    "User",
     "BankAccount",
     "IncomeType",
     "Income",

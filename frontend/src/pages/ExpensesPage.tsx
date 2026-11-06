@@ -284,7 +284,7 @@ export function ExpensesPage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="TRANSACTIONS"
+        eyebrow="Transactions"
         title="Expenses"
         description="Search, review, and manage your transactions."
         actions={
@@ -318,7 +318,7 @@ export function ExpensesPage() {
             type="search"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search merchant, note, or type…"
+            placeholder="Search transactions…"
             aria-label="Search transactions"
           />
         </label>

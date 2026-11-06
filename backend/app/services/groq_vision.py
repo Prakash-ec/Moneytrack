@@ -153,8 +153,13 @@ def _encode_image(data: bytes) -> str:
 # Normalizers (shared by image and text paths)
 # ---------------------------------------------------------------------------
 
-def _normalize_amount(value: Any) -> int | None:
-    """Coerce a Groq-returned total into integer paise, with bounds sanity check."""
+def _normalize_amount(value: Any, is_paise: bool | None = None) -> int | None:
+    """Coerce a Groq-returned total into integer paise, with bounds sanity check.
+
+    If is_paise is True, the input is already in paise and is not scaled.
+    If is_paise is False, the input is in Rupees and is multiplied by 100.
+    If is_paise is None, applies legacy heuristic for backwards-compatibility.
+    """
     if value is None:
         return None
     is_decimal_str = False
@@ -168,16 +173,21 @@ def _normalize_amount(value: Any) -> int | None:
             is_decimal_str = (num % 1 != 0)
     except (TypeError, ValueError):
         return None
-    if num is None or num != num or num == float("inf"):
+    if num is None or num != num or num == float("inf") or num <= 0:
         return None
 
-    # If explicitly given with decimals, or fractional rupees, express in paise (* 100)
-    if is_decimal_str or (num % 1 != 0):
-        paise = int(round(num * 100))
-    elif num < 1000:
+    if is_paise is True:
+        paise = int(round(num))
+    elif is_paise is False:
         paise = int(round(num * 100))
     else:
-        paise = int(round(num))
+        # If explicitly given with decimals, or fractional rupees, express in paise (* 100)
+        if is_decimal_str or (num % 1 != 0):
+            paise = int(round(num * 100))
+        elif num < 1000:
+            paise = int(round(num * 100))
+        else:
+            paise = int(round(num))
 
     if paise < MIN_TOTAL_PAISE or paise > MAX_TOTAL_PAISE:
         return None
@@ -536,22 +546,32 @@ class GroqVisionProvider:
         return self._parse_json_fields(data)
 
     def _parse_json_fields(self, data: dict[str, Any]) -> dict[str, Any]:
-        raw_total = (
-            data.get("total_paise")
-            if data.get("total_paise") is not None
-            else (
-                data.get("total_amount")
-                if data.get("total_amount") is not None
-                else data.get("amount") if data.get("amount") is not None else data.get("total")
-            )
-        )
-        total_paise = _normalize_amount(raw_total)
-        subtotal_paise = _normalize_amount(
-            data.get("subtotal_paise") if data.get("subtotal_paise") is not None else data.get("subtotal")
-        )
-        tax_paise = _normalize_amount(
-            data.get("tax_paise") if data.get("tax_paise") is not None else data.get("tax")
-        )
+        if data.get("total_paise") is not None:
+            total_paise = _normalize_amount(data.get("total_paise"), is_paise=True)
+        elif data.get("total_rupees") is not None:
+            total_paise = _normalize_amount(data.get("total_rupees"), is_paise=False)
+        elif data.get("total_amount") is not None:
+            total_paise = _normalize_amount(data.get("total_amount"), is_paise=False)
+        elif data.get("amount") is not None:
+            total_paise = _normalize_amount(data.get("amount"), is_paise=False)
+        elif data.get("total") is not None:
+            total_paise = _normalize_amount(data.get("total"), is_paise=False)
+        else:
+            total_paise = None
+
+        if data.get("subtotal_paise") is not None:
+            subtotal_paise = _normalize_amount(data.get("subtotal_paise"), is_paise=True)
+        elif data.get("subtotal") is not None:
+            subtotal_paise = _normalize_amount(data.get("subtotal"), is_paise=False)
+        else:
+            subtotal_paise = None
+
+        if data.get("tax_paise") is not None:
+            tax_paise = _normalize_amount(data.get("tax_paise"), is_paise=True)
+        elif data.get("tax") is not None:
+            tax_paise = _normalize_amount(data.get("tax"), is_paise=False)
+        else:
+            tax_paise = None
         expense_date = _normalize_date(data.get("expense_date") or data.get("date"))
         currency = data.get("currency")
         if not isinstance(currency, str) or not currency.strip():

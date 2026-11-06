@@ -1,17 +1,17 @@
+import datetime
 from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.budget import (
     BudgetCreate,
-    BudgetUpdate,
-    CategoryBudgetCreate,
-    CategoryBudgetUpdate,
     BudgetRead,
+    CategoryBudgetCreate,
     CategoryBudgetRead,
 )
 from app.services.budgets import (
@@ -30,14 +30,14 @@ router = APIRouter(prefix="/budgets", tags=["Budgets"])
 
 @router.get("", response_model=BudgetRead, summary="Get monthly overall budget")
 def get_monthly_budget_endpoint(
-    month: date = Query(default=None, description="Month to retrieve budget for (defaults to current month)"),
+    month: date | None = Query(default=None, description="Month to retrieve budget for (defaults to current month)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> BudgetRead:
-    import datetime
     if month is None:
         today = datetime.date.today()
         month = date(today.year, today.month, 1)
-    budget = get_monthly_budget(db, month)
+    budget = get_monthly_budget(db, month, user_id=current_user.id)
     if budget is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -49,22 +49,23 @@ def get_monthly_budget_endpoint(
 @router.post("", response_model=BudgetRead, status_code=status.HTTP_201_CREATED, summary="Create or update monthly budget")
 def create_monthly_budget_endpoint(
     payload: BudgetCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> BudgetRead:
-    return create_monthly_budget(db, payload)
+    return create_monthly_budget(db, payload, user_id=current_user.id)
 
 
 @router.get("/category/{category}", response_model=CategoryBudgetRead, summary="Get category budget")
 def get_category_budget_endpoint(
     category: str,
-    month: date = Query(default=None, description="Month to retrieve budget for (defaults to current month)"),
+    month: date | None = Query(default=None, description="Month to retrieve budget for (defaults to current month)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> CategoryBudgetRead:
-    import datetime
     if month is None:
         today = datetime.date.today()
         month = date(today.year, today.month, 1)
-    budget = get_category_budget(db, category, month)
+    budget = get_category_budget(db, category, month, user_id=current_user.id)
     if budget is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -76,22 +77,23 @@ def get_category_budget_endpoint(
 @router.post("/category", response_model=CategoryBudgetRead, status_code=status.HTTP_201_CREATED, summary="Create or update category budget")
 def create_category_budget_endpoint(
     payload: CategoryBudgetCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> CategoryBudgetRead:
-    return create_category_budget(db, payload)
+    return create_category_budget(db, payload, user_id=current_user.id)
 
 
 @router.delete("/category/{category}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete category budget")
 def delete_category_budget_endpoint(
     category: str,
-    month: date = Query(default=None, description="Month to delete budget for (defaults to current month)"),
+    month: date | None = Query(default=None, description="Month to delete budget for (defaults to current month)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    import datetime
     if month is None:
         today = datetime.date.today()
         month = date(today.year, today.month, 1)
-    success = delete_category_budget(db, category, month)
+    success = delete_category_budget(db, category, month, user_id=current_user.id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -101,49 +103,49 @@ def delete_category_budget_endpoint(
 
 @router.get("/category", summary="List all category budgets for a month")
 def list_category_budgets_endpoint(
-    month: date = Query(default=None, description="Month to list budgets for (defaults to current month)"),
+    month: date | None = Query(default=None, description="Month to list budgets for (defaults to current month)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[CategoryBudgetRead]:
-    import datetime
     if month is None:
         today = datetime.date.today()
         month = date(today.year, today.month, 1)
-    return list_category_budgets(db, month)
+    return list_category_budgets(db, month, user_id=current_user.id)
 
 
 @router.get("/summary", summary="Get budget summary for a month")
 def get_budget_summary(
-    month: date = Query(default=None, description="Month to get summary for (defaults to current month)"),
+    month: date | None = Query(default=None, description="Month to get summary for (defaults to current month)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    import datetime
     if month is None:
         today = datetime.date.today()
         month = date(today.year, today.month, 1)
-    budget = get_monthly_budget(db, month)
-    spending = calculate_monthly_spending(db, month)
+    budget = get_monthly_budget(db, month, user_id=current_user.id)
+    spending = calculate_monthly_spending(db, month, user_id=current_user.id)
     if budget:
-        remaining = budget.amount_paise - spending['total_paise']
-        percentage = (spending['total_paise'] / budget.amount_paise) * 100 if budget.amount_paise > 0 else 0
+        remaining = budget.amount_paise - spending["total_paise"]
+        percentage = (spending["total_paise"] / budget.amount_paise) * 100 if budget.amount_paise > 0 else 0
     else:
         remaining = None
         percentage = None
-    category_budgets = list_category_budgets(db, month)
+    category_budgets = list_category_budgets(db, month, user_id=current_user.id)
     category_spending = {}
     for cb in category_budgets:
-        cs = calculate_category_spending(db, cb.category, month)
+        cs = calculate_category_spending(db, cb.category, month, user_id=current_user.id)
         category_spending[cb.category] = {
-            'budget_paise': cb.amount_paise,
-            'spent_paise': cs['total_paise'],
-            'remaining_paise': cb.amount_paise - cs['total_paise'],
-            'percentage_used': (cs['total_paise'] / cb.amount_paise) * 100 if cb.amount_paise > 0 else 0,
-            'transaction_count': cs['transaction_count'],
+            "budget_paise": cb.amount_paise,
+            "spent_paise": cs["total_paise"],
+            "remaining_paise": cb.amount_paise - cs["total_paise"],
+            "percentage_used": (cs["total_paise"] / cb.amount_paise) * 100 if cb.amount_paise > 0 else 0,
+            "transaction_count": cs["transaction_count"],
         }
     return {
-        'budget': BudgetRead.model_validate(budget) if budget else None,
-        'spent': spending['total_paise'],
-        'remaining': remaining,
-        'percentage_used': round(percentage, 1) if percentage is not None else None,
-        'transaction_count': spending['transaction_count'],
-        'category_breakdown': category_spending,
+        "budget": BudgetRead.model_validate(budget) if budget else None,
+        "spent": spending["total_paise"],
+        "remaining": remaining,
+        "percentage_used": round(percentage, 1) if percentage is not None else None,
+        "transaction_count": spending["transaction_count"],
+        "category_breakdown": category_spending,
     }

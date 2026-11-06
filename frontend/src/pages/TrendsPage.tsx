@@ -175,7 +175,7 @@ export function TrendsPage() {
   return (
     <div className="page pb-20">
       <PageHeader
-        eyebrow="ANALYTICS & INTELLIGENCE"
+        eyebrow="Trends & velocity"
         title="Spending trends"
         description="Monitor temporal trajectories, spending velocity, and habit cycles."
         actions={

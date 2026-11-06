@@ -36,6 +36,7 @@ def generate_weekly_report(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     ref_date: Optional[date] = None,
+    user_id: Optional[int] = None,
 ) -> WeeklyReportData:
     if not start_date or not end_date:
         start_date, end_date = get_previous_complete_week(ref_date)
@@ -44,20 +45,22 @@ def generate_weekly_report(
     end_str = end_date.strftime("%Y-%m-%d")
 
     # 1. Total Expenses for this period
-    expenses = (
-        db.query(Expense)
-        .filter(Expense.expense_date >= start_str, Expense.expense_date <= end_str)
-        .all()
+    expense_query = db.query(Expense).filter(
+        Expense.expense_date >= start_str, Expense.expense_date <= end_str
     )
+    if user_id is not None:
+        expense_query = expense_query.filter(Expense.user_id == user_id)
+    expenses = expense_query.all()
     total_expense_paise = sum(e.amount_paise for e in expenses)
     txn_count = len(expenses)
 
     # 2. Total Incomes for this period
-    incomes = (
-        db.query(Income)
-        .filter(Income.income_date >= start_str, Income.income_date <= end_str)
-        .all()
+    income_query = db.query(Income).filter(
+        Income.income_date >= start_str, Income.income_date <= end_str
     )
+    if user_id is not None:
+        income_query = income_query.filter(Income.user_id == user_id)
+    incomes = income_query.all()
     total_income_paise = sum(i.amount_paise for i in incomes)
 
     # 3. Cashflow & Savings Rate
@@ -77,18 +80,20 @@ def generate_weekly_report(
     prev_start_str = prev_start_date.strftime("%Y-%m-%d")
     prev_end_str = prev_end_date.strftime("%Y-%m-%d")
 
-    prev_expenses = (
-        db.query(Expense)
-        .filter(Expense.expense_date >= prev_start_str, Expense.expense_date <= prev_end_str)
-        .all()
+    prev_exp_query = db.query(Expense).filter(
+        Expense.expense_date >= prev_start_str, Expense.expense_date <= prev_end_str
     )
+    if user_id is not None:
+        prev_exp_query = prev_exp_query.filter(Expense.user_id == user_id)
+    prev_expenses = prev_exp_query.all()
     prev_expense_paise = sum(e.amount_paise for e in prev_expenses)
 
-    prev_incomes = (
-        db.query(Income)
-        .filter(Income.income_date >= prev_start_str, Income.income_date <= prev_end_str)
-        .all()
+    prev_inc_query = db.query(Income).filter(
+        Income.income_date >= prev_start_str, Income.income_date <= prev_end_str
     )
+    if user_id is not None:
+        prev_inc_query = prev_inc_query.filter(Income.user_id == user_id)
+    prev_incomes = prev_inc_query.all()
     prev_income_paise = sum(i.amount_paise for i in prev_incomes)
 
     expense_change_paise = total_expense_paise - prev_expense_paise

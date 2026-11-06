@@ -138,6 +138,13 @@ async def lifespan(app: FastAPI):
     run_startup_migrations()
     seed_default_expense_types()
 
+    if settings.sql_profiling_enabled:
+        from app.core.profiler import attach_profiling_listeners
+        from app.db.session import engine
+
+        attach_profiling_listeners(engine, settings.slow_query_threshold_ms)
+        logger.info("SQL query profiling activated (threshold: %.1f ms)", settings.slow_query_threshold_ms)
+
     keep_alive_task = None
     is_test = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST")
     if settings.keep_alive_enabled and not is_test:
@@ -200,6 +207,15 @@ app.add_middleware(
     max_age=600,
 )
 app.add_middleware(GZipMiddleware, minimum_size=800)
+
+if settings.sql_profiling_enabled:
+    from app.core.profiler import SQLProfilingMiddleware
+
+    app.add_middleware(
+        SQLProfilingMiddleware,
+        enabled=True,
+        slow_threshold_ms=settings.slow_query_threshold_ms,
+    )
 
 
 @app.middleware("http")

@@ -129,7 +129,7 @@ export function TypesPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="ORGANISE"
+        eyebrow="Categories"
         title="Expense types"
         description="Create and manage categories for your spending."
         actions={

@@ -388,7 +388,7 @@ export function SmsReviewPage() {
   return (
     <div className="page space-y-5">
       <PageHeader
-        eyebrow="ANDROID & AUTOMATION"
+        eyebrow="SMS review"
         title="SMS Review"
         description="Review transactions detected from bank messages and authorise payments."
         actions={

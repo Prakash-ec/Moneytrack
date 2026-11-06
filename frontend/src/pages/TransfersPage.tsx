@@ -119,8 +119,8 @@ export function TransfersPage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="INTERNAL LEDGER"
-        title="Account Transfers"
+        eyebrow="Internal ledger"
+        title="Account transfers"
         description={`${formatRangeLabel(period.range)} · Inter-account liquidity`}
         actions={
           <div className="flex items-center gap-2">
@@ -144,22 +144,22 @@ export function TransfersPage() {
       />
 
       {/* Information Banner */}
-      <div className="card p-3.5 sm:p-4 mb-5 flex items-start gap-3 bg-surface-raised/60 border border-sky-500/20">
-        <div className="p-1 rounded-md bg-sky-500/10 text-sky-400 shrink-0 mt-0.5">
+      <div className="card p-3.5 sm:p-4 mb-5 flex items-start gap-3 bg-surface-raised border border-border">
+        <div className="p-1 rounded-md bg-surface text-muted shrink-0 mt-0.5 border border-border">
           <Info className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="text-xs text-muted leading-relaxed">
-          <strong className="text-text font-semibold">Non-Taxable Inter-Account Movement:</strong> Transfers between your own accounts adjust source and destination balances in the ledger without affecting income, expense, or consolidated balance totals.
+          <strong className="text-text font-medium">Non-taxable inter-account movement:</strong> Transfers between your own accounts adjust source and destination balances in the ledger without affecting income, expense, or consolidated balance totals.
         </div>
       </div>
 
       {/* Transfer Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
         <div className="card p-4 sm:p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
-            Total Transferred
+          <div className="text-xs font-medium text-muted mb-1">
+            Total transferred
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-sky-400 font-display">
+          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
             {formatINR(totalTransferPaise)}
           </div>
           <div className="text-[11px] text-muted mt-1">
@@ -168,20 +168,20 @@ export function TransfersPage() {
         </div>
 
         <div className="card p-4 sm:p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
-            Active Accounts
+          <div className="text-xs font-medium text-muted mb-1">
+            Active accounts
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-text font-display">
+          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
             {bankAccounts.length}
           </div>
           <div className="text-[11px] text-muted mt-1">Available for internal routing</div>
         </div>
 
         <div className="card p-4 sm:p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
-            Net Worth Impact
+          <div className="text-xs font-medium text-muted mb-1">
+            Net worth impact
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-display">
+          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
             ₹0.00
           </div>
           <div className="text-[11px] text-muted mt-1">Zero impact on consolidated worth</div>
@@ -193,44 +193,44 @@ export function TransfersPage() {
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-surface-raised border-b border-border text-muted font-bold uppercase tracking-wider text-[10px]">
+              <thead className="bg-surface-raised border-b border-border text-muted font-medium text-xs">
                 <tr>
                   <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">From Account</th>
+                  <th className="py-3 px-4">From account</th>
                   <th className="py-3 px-4 text-center">Direction</th>
-                  <th className="py-3 px-4">To Account</th>
+                  <th className="py-3 px-4">To account</th>
                   <th className="py-3 px-4 text-right">Amount</th>
-                  <th className="py-3 px-4">Reference / Note</th>
+                  <th className="py-3 px-4">Reference / note</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {transfers.map((transfer) => (
                   <tr key={transfer.id} className="hover:bg-surface-raised/50 transition-colors">
-                    <td className="py-3.5 px-4 font-mono text-muted whitespace-nowrap">
+                    <td className="py-3.5 px-4 font-mono tabular-nums text-muted whitespace-nowrap">
                       {formatDate(transfer.transfer_date)}
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text">{transfer.from_account?.name}</div>
-                      <div className="text-[10px] text-muted">
+                      <div className="font-medium text-text">{transfer.from_account?.name}</div>
+                      <div className="text-[10px] text-muted font-mono tabular-nums">
                         {transfer.from_account?.bank_name} {transfer.from_account?.account_number_mask && `••${transfer.from_account.account_number_mask}`}
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <div className="inline-flex items-center justify-center p-1 rounded-full bg-sky-500/10 text-sky-400 border border-sky-400/20">
+                      <div className="inline-flex items-center justify-center p-1 rounded-md bg-surface-raised text-muted border border-border">
                         <ArrowRight className="h-3 w-3" aria-hidden="true" />
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text">{transfer.to_account?.name}</div>
-                      <div className="text-[10px] text-muted">
+                      <div className="font-medium text-text">{transfer.to_account?.name}</div>
+                      <div className="text-[10px] text-muted font-mono tabular-nums">
                         {transfer.to_account?.bank_name} {transfer.to_account?.account_number_mask && `••${transfer.to_account.account_number_mask}`}
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-sky-400 text-sm whitespace-nowrap">
+                    <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-text text-sm whitespace-nowrap">
                       {formatINR(transfer.amount_paise)}
                     </td>
                     <td className="py-3.5 px-4 text-muted">
-                      {transfer.reference && <div className="font-mono text-[10px]">Ref: {transfer.reference}</div>}
+                      {transfer.reference && <div className="font-mono tabular-nums text-[10px]">Ref: {transfer.reference}</div>}
                       {transfer.note && <div className="text-[11px] truncate max-w-xs">{transfer.note}</div>}
                       {!transfer.reference && !transfer.note && <span className="text-[11px]">—</span>}
                     </td>

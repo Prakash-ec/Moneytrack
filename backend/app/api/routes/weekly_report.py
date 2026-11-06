@@ -3,7 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.weekly_report import WeeklyReportData
 from app.services import weekly_report as report_service
 
@@ -17,7 +19,12 @@ def get_weekly_report(
     end_date: Optional[date] = Query(None, description="End date of week (YYYY-MM-DD, Sunday)"),
     ref_date: Optional[date] = Query(None, description="Reference date to calculate previous complete week from"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return report_service.generate_weekly_report(
-        db, start_date=start_date, end_date=end_date, ref_date=ref_date
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        ref_date=ref_date,
+        user_id=current_user.id,
     )

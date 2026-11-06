@@ -1,13 +1,13 @@
-import calendar
-import statistics
 from collections import defaultdict
 from datetime import date, timedelta
+import math
+import statistics
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.money import change_percent, divide_round, format_inr, percent
+from app.core.money import change_percent, divide_round, percent
 from app.models.expense import Expense
 from app.models.expense_type import ExpenseType
 from app.schemas.analytics import (
@@ -30,14 +30,18 @@ from app.services.periods import previous_period
 Granularity = Literal["daily", "weekly", "monthly"]
 
 
-def _load_expenses(db: Session, start: date, end: date) -> list[Expense]:
+def _load_expenses(
+    db: Session, start: date, end: date, user_id: int | None = None
+) -> list[Expense]:
+    stmt = (
+        select(Expense)
+        .options(joinedload(Expense.expense_type))
+        .where(Expense.expense_date >= start, Expense.expense_date <= end)
+    )
+    if user_id is not None:
+        stmt = stmt.where(Expense.user_id == user_id)
     return list(
-        db.scalars(
-            select(Expense)
-            .options(joinedload(Expense.expense_type))
-            .where(Expense.expense_date >= start, Expense.expense_date <= end)
-            .order_by(Expense.expense_date.asc(), Expense.id.asc())
-        )
+        db.scalars(stmt.order_by(Expense.expense_date.asc(), Expense.id.asc()))
         .unique()
         .all()
     )
@@ -95,9 +99,10 @@ def summary(
     start: date,
     end: date,
     expenses: list[Expense] | None = None,
+    user_id: int | None = None,
 ) -> SummaryRead:
     if expenses is None:
-        expenses = _load_expenses(db, start, end)
+        expenses = _load_expenses(db, start, end, user_id=user_id)
     total = sum(item.amount_paise for item in expenses)
     count = len(expenses)
     highest = max(
@@ -123,7 +128,7 @@ def summary(
     )
 
     previous_start, previous_end = previous_period(start, end)
-    previous_expenses = _load_expenses(db, previous_start, previous_end)
+    previous_expenses = _load_expenses(db, previous_start, previous_end, user_id=user_id)
     previous_total = sum(item.amount_paise for item in previous_expenses)
 
     return SummaryRead(
@@ -146,8 +151,10 @@ def summary(
     )
 
 
-def by_type(db: Session, start: date, end: date) -> ByTypeRead:
-    expenses = _load_expenses(db, start, end)
+def by_type(
+    db: Session, start: date, end: date, user_id: int | None = None
+) -> ByTypeRead:
+    expenses = _load_expenses(db, start, end, user_id=user_id)
     total = sum(item.amount_paise for item in expenses)
     items = _breakdown(_aggregate_by_type(expenses), total)
     return ByTypeRead(start_date=start, end_date=end, total_paise=total, items=items)
@@ -252,67 +259,69 @@ def _build_insights(
 ) -> list[str]:
     insights: list[str] = []
     if summary_data.transaction_count == 0:
-        return insights
+        return []
 
     top = summary_data.most_expensive_type
-    if top and top.share_percent >= 25:
+    if top:
         insights.append(
-            f"{top.name} accounted for {top.share_percent:.1f}% of your recorded "
-            "expenditure in this period."
+            f"{top.name} was the largest expense category, accounting for {top.share_percent}% of spending."
         )
 
     comparison = summary_data.comparison
-    if comparison.direction in {"up", "down"} and comparison.change_percent is not None:
-        change_word = "up" if comparison.direction == "up" else "down"
+    if comparison.direction == "up" and comparison.change_percent:
         insights.append(
-            f"Spending is {change_word} {abs(comparison.change_percent):.1f}% "
-            f"({format_inr(abs(comparison.change_paise))}) compared with the "
-            "preceding period of equal length."
+            f"Spending is up by {comparison.change_percent}% compared to the previous period."
         )
-    elif comparison.direction == "new":
-        insights.append("This is the first recorded spending for an equivalent preceding period.")
+    elif comparison.direction == "down" and comparison.change_percent:
+        insights.append(
+            f"Spending is down by {abs(comparison.change_percent)}% compared to the previous period."
+        )
 
     if largest_days:
-        top_day = largest_days[0]
+        busiest = largest_days[0]
         insights.append(
-            f"Your largest spending day was {top_day.date.strftime('%d %b %Y')} "
-            f"at {format_inr(top_day.total_paise)}."
+            f"Peak spending day was {busiest.date.isoformat()} with {busiest.transaction_count} transaction(s)."
         )
 
-    if recurring:
-        insights.append(recurring[0].message)
+    for item in recurring[:2]:
+        insights.append(item.message)
 
-    return insights[:4]
+    return insights
 
 
-def trends(db: Session, start: date, end: date, granularity: Granularity = "daily") -> TrendsRead:
-    expenses = _load_expenses(db, start, end)
-    total = sum(item.amount_paise for item in expenses)
-    aggregates = _aggregate_by_type(expenses)
-    rankings = _breakdown(aggregates, total)
-
-    daily_totals: dict[date, tuple[int, int]] = defaultdict(lambda: (0, 0))
-    for expense in expenses:
-        existing_total, existing_count = daily_totals[expense.expense_date]
-        daily_totals[expense.expense_date] = (
-            existing_total + expense.amount_paise,
-            existing_count + 1,
-        )
-    largest_days = sorted(
-        (
-            LargestDay(date=day, total_paise=amount, transaction_count=count)
-            for day, (amount, count) in daily_totals.items()
-        ),
-        key=lambda item: (-item.total_paise, item.date),
-    )[:5]
-
+def trends(
+    db: Session,
+    start: date,
+    end: date,
+    granularity: Granularity = "daily",
+    user_id: int | None = None,
+) -> TrendsRead:
+    expenses = _load_expenses(db, start, end, user_id=user_id)
+    series = _build_series(expenses, start, end, granularity)
     recurring = _recurring_types(expenses, start, end)
-    summary_data = summary(db, start, end, expenses=expenses)
+
+    by_day: dict[date, tuple[int, int]] = defaultdict(lambda: (0, 0))
+    for expense in expenses:
+        total, count = by_day[expense.expense_date]
+        by_day[expense.expense_date] = (total + expense.amount_paise, count + 1)
+
+    sorted_days = sorted(
+        [
+            LargestDay(date=day, total_paise=total, transaction_count=count)
+            for day, (total, count) in by_day.items()
+        ],
+        key=lambda item: (-item.total_paise, item.date),
+    )
+    largest_days = sorted_days[:5]
+    total = sum(item.amount_paise for item in expenses)
+    rankings = _breakdown(_aggregate_by_type(expenses), total)
+    summary_data = summary(db, start, end, expenses=expenses, user_id=user_id)
+
     return TrendsRead(
         start_date=start,
         end_date=end,
         granularity=granularity,
-        series=_build_series(expenses, start, end, granularity),
+        series=series,
         largest_days=largest_days,
         rankings=rankings,
         recurring=recurring,
@@ -320,57 +329,60 @@ def trends(db: Session, start: date, end: date, granularity: Granularity = "dail
     )
 
 
-def comparison(db: Session, start: date, end: date) -> ComparisonRead:
-    previous_start, previous_end = previous_period(start, end)
-    current_expenses = _load_expenses(db, start, end)
-    previous_expenses = _load_expenses(db, previous_start, previous_end)
+def comparison(
+    db: Session, start: date, end: date, user_id: int | None = None
+) -> ComparisonRead:
+    current_expenses = _load_expenses(db, start, end, user_id=user_id)
     current_total = sum(item.amount_paise for item in current_expenses)
-    previous_total = sum(item.amount_paise for item in previous_expenses)
     current_aggregates = _aggregate_by_type(current_expenses)
-    previous_aggregates = _aggregate_by_type(previous_expenses)
 
-    items: list[TypeComparison] = []
-    type_ids = set(current_aggregates) | set(previous_aggregates)
-    for type_id in type_ids:
-        current_entry = current_aggregates.get(type_id)
-        previous_entry = previous_aggregates.get(type_id)
-        entry_type: ExpenseType = (current_entry or previous_entry)["type"]
-        current_value = current_entry["total"] if current_entry else 0
-        previous_value = previous_entry["total"] if previous_entry else 0
-        items.append(
+    prev_start, prev_end = previous_period(start, end)
+    prev_expenses = _load_expenses(db, prev_start, prev_end, user_id=user_id)
+    prev_total = sum(item.amount_paise for item in prev_expenses)
+    prev_aggregates = _aggregate_by_type(prev_expenses)
+
+    all_type_ids = set(current_aggregates.keys()) | set(prev_aggregates.keys())
+    type_items: list[TypeComparison] = []
+
+    for type_id in all_type_ids:
+        curr = current_aggregates.get(type_id)
+        prev = prev_aggregates.get(type_id)
+
+        expense_type = (curr or prev)["type"]
+        c_total = curr["total"] if curr else 0
+        c_count = curr["count"] if curr else 0
+        p_total = prev["total"] if prev else 0
+        p_count = prev["count"] if prev else 0
+
+        type_items.append(
             TypeComparison(
-                expense_type_id=type_id,
-                name=entry_type.name,
-                color=entry_type.color,
-                icon=entry_type.icon,
-                current_total_paise=current_value,
-                previous_total_paise=previous_value,
-                current_transaction_count=current_entry["count"] if current_entry else 0,
-                previous_transaction_count=previous_entry["count"] if previous_entry else 0,
-                change_paise=current_value - previous_value,
-                change_percent=change_percent(current_value, previous_value),
-                direction=_direction(current_value, previous_value),
+                expense_type_id=expense_type.id,
+                name=expense_type.name,
+                color=expense_type.color,
+                icon=expense_type.icon,
+                current_total_paise=c_total,
+                current_transaction_count=c_count,
+                previous_total_paise=p_total,
+                previous_transaction_count=p_count,
+                change_paise=c_total - p_total,
+                change_percent=change_percent(c_total, p_total),
+                direction=_direction(c_total, p_total),
             )
         )
-    items.sort(
-        key=lambda item: (
-            -item.current_total_paise,
-            -item.previous_total_paise,
-            item.name.casefold(),
-        )
-    )
+
+    type_items.sort(key=lambda item: (-item.current_total_paise, item.name.casefold()))
 
     return ComparisonRead(
         start_date=start,
         end_date=end,
-        previous_start_date=previous_start,
-        previous_end_date=previous_end,
+        previous_start_date=prev_start,
+        previous_end_date=prev_end,
         current_total_paise=current_total,
-        previous_total_paise=previous_total,
+        previous_total_paise=prev_total,
         current_transaction_count=len(current_expenses),
-        previous_transaction_count=len(previous_expenses),
-        change_paise=current_total - previous_total,
-        change_percent=change_percent(current_total, previous_total),
-        direction=_direction(current_total, previous_total),
-        by_type=items,
+        previous_transaction_count=len(prev_expenses),
+        change_paise=current_total - prev_total,
+        change_percent=change_percent(current_total, prev_total),
+        direction=_direction(current_total, prev_total),
+        by_type=type_items,
     )

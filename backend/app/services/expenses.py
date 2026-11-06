@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.models.bank_account import BankAccount
 from app.models.expense import Expense
 from app.models.expense_type import ExpenseType
 from app.models.idempotency_key import ExpenseIdempotencyKey
@@ -22,12 +23,15 @@ SortOrder = Literal[
 ]
 
 
-def get_expense(db: Session, expense_id: int) -> Expense:
-    model = db.scalar(
+def get_expense(db: Session, expense_id: int, user_id: int | None = None) -> Expense:
+    stmt = (
         select(Expense)
-        .options(joinedload(Expense.expense_type))
+        .options(joinedload(Expense.expense_type), joinedload(Expense.bank_account))
         .where(Expense.id == expense_id)
     )
+    if user_id is not None:
+        stmt = stmt.where(Expense.user_id == user_id)
+    model = db.scalar(stmt)
     if model is None:
         raise NotFoundError("Expense not found.")
     return model
@@ -50,6 +54,7 @@ def _apply_sort(stmt, sort: SortOrder):
 def list_expenses(
     db: Session,
     *,
+    user_id: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     expense_type_id: int | None = None,
@@ -65,13 +70,15 @@ def list_expenses(
     stmt = (
         select(Expense)
         .join(ExpenseType, Expense.expense_type_id == ExpenseType.id)
-        .options(joinedload(Expense.expense_type))
+        .options(joinedload(Expense.expense_type), joinedload(Expense.bank_account))
     )
     count_stmt = select(func.count(Expense.id)).join(
         ExpenseType, Expense.expense_type_id == ExpenseType.id
     )
 
     conditions = []
+    if user_id is not None:
+        conditions.append(Expense.user_id == user_id)
     if start_date is not None:
         conditions.append(Expense.expense_date >= start_date)
     if end_date is not None:
@@ -118,6 +125,8 @@ def list_expenses(
 def create_expense(
     db: Session,
     payload: ExpenseCreate,
+    *,
+    user_id: int | None = None,
     idempotency_key: str | None = None,
     account_id: int | None = None,
 ) -> tuple[ExpenseRead, bool]:
@@ -139,18 +148,27 @@ def create_expense(
             .first()
         )
         if existing is not None:
-            loaded = get_expense(db, existing.expense_id)
+            loaded = get_expense(db, existing.expense_id, user_id=user_id)
             return ExpenseRead.model_validate(loaded), True
 
     expense_type = db.get(ExpenseType, payload.expense_type_id)
     if expense_type is None:
         raise NotFoundError("Expense type not found.")
+    if user_id is not None and expense_type.user_id is not None and expense_type.user_id != user_id:
+        raise NotFoundError("Expense type not found.")
     if expense_type.is_archived:
         raise ConflictError("Cannot add an expense to an archived expense type.")
 
     effective_account_id = account_id or getattr(payload, "account_id", None)
+    if effective_account_id is not None:
+        bank_acc = db.get(BankAccount, effective_account_id)
+        if not bank_acc:
+            raise NotFoundError("Bank account not found.")
+        if user_id is not None and bank_acc.user_id is not None and bank_acc.user_id != user_id:
+            raise NotFoundError("Bank account not found.")
 
     model = Expense(
+        user_id=user_id,
         expense_type_id=payload.expense_type_id,
         account_id=effective_account_id,
         amount_paise=payload.amount_paise,
@@ -183,7 +201,7 @@ def create_expense(
                 .first()
             )
             if existing is not None:
-                loaded = get_expense(db, existing.expense_id)
+                loaded = get_expense(db, existing.expense_id, user_id=user_id)
                 return ExpenseRead.model_validate(loaded), True
         raise
 
@@ -200,13 +218,26 @@ def create_expense(
     except Exception:
         pass
 
-    loaded = get_expense(db, model.id)
+    loaded = get_expense(db, model.id, user_id=user_id)
     return ExpenseRead.model_validate(loaded), False
 
 
-def update_expense(db: Session, expense_id: int, payload: ExpenseUpdate) -> ExpenseRead:
-    model = get_expense(db, expense_id)
+def update_expense(
+    db: Session,
+    expense_id: int,
+    payload: ExpenseUpdate,
+    user_id: int | None = None,
+) -> ExpenseRead:
+    model = get_expense(db, expense_id, user_id=user_id)
+    old_account_id = model.account_id
     fields = payload.model_fields_set
+
+    if "account_id" in fields:
+        if payload.account_id is not None:
+            account = db.get(BankAccount, payload.account_id)
+            if not account or (user_id is not None and account.user_id is not None and account.user_id != user_id):
+                raise NotFoundError("Bank account not found.")
+        model.account_id = payload.account_id
 
     if "expense_type_id" in fields:
         if payload.expense_type_id is None:
@@ -214,6 +245,8 @@ def update_expense(db: Session, expense_id: int, payload: ExpenseUpdate) -> Expe
         if payload.expense_type_id != model.expense_type_id:
             expense_type = db.get(ExpenseType, payload.expense_type_id)
             if expense_type is None:
+                raise NotFoundError("Expense type not found.")
+            if user_id is not None and expense_type.user_id is not None and expense_type.user_id != user_id:
                 raise NotFoundError("Expense type not found.")
             if expense_type.is_archived:
                 raise ConflictError("Cannot move an expense to an archived expense type.")
@@ -235,13 +268,24 @@ def update_expense(db: Session, expense_id: int, payload: ExpenseUpdate) -> Expe
 
     db.commit()
     db.refresh(model)
-    loaded = get_expense(db, model.id)
+
+    # Recalculate account balance for both old and new accounts
+    from app.services.bank_accounts import recalculate_account_balance
+    if old_account_id:
+        recalculate_account_balance(db, old_account_id)
+    if model.account_id and model.account_id != old_account_id:
+        recalculate_account_balance(db, model.account_id)
+
+    loaded = get_expense(db, model.id, user_id=user_id)
     return ExpenseRead.model_validate(loaded)
 
 
-def delete_expense(db: Session, expense_id: int) -> None:
-    model = db.get(Expense, expense_id)
-    if model is None:
-        raise NotFoundError("Expense not found.")
+def delete_expense(db: Session, expense_id: int, user_id: int | None = None) -> None:
+    model = get_expense(db, expense_id, user_id=user_id)
+    account_id = model.account_id
     db.delete(model)
     db.commit()
+
+    if account_id:
+        from app.services.bank_accounts import recalculate_account_balance
+        recalculate_account_balance(db, account_id)

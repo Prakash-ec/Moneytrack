@@ -2,7 +2,9 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.notification_log import (
     NotificationLogRead,
     NotificationPreferences,
@@ -18,10 +20,13 @@ def get_notifications(
     unread_only: bool = Query(False),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    items = notif_service.list_notifications(db, unread_only=unread_only, limit=limit)
-    unread = notif_service.get_unread_count(db)
-    prefs = notif_service.get_preferences(db)
+    items = notif_service.list_notifications(
+        db, unread_only=unread_only, limit=limit, user_id=current_user.id
+    )
+    unread = notif_service.get_unread_count(db, user_id=current_user.id)
+    prefs = notif_service.get_preferences(db, user_id=current_user.id)
     return NotificationCenterSummary(
         unread_count=unread,
         total_count=len(items),
@@ -34,8 +39,9 @@ def get_notifications(
 def mark_notification_read(
     notification_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    notif = notif_service.mark_as_read(db, notification_id)
+    notif = notif_service.mark_as_read(db, notification_id, user_id=current_user.id)
     if not notif:
         raise HTTPException(status_code=404, detail="Notification not found")
     return NotificationLogRead.model_validate(notif)
@@ -45,19 +51,24 @@ def mark_notification_read(
 @router.post("/mark-all-read", response_model=dict)
 def mark_all_notifications_read(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    count = notif_service.mark_all_as_read(db)
+    count = notif_service.mark_all_as_read(db, user_id=current_user.id)
     return {"success": True, "marked_count": count}
 
 
 @router.get("/preferences", response_model=NotificationPreferences)
-def get_preferences(db: Session = Depends(get_db)):
-    return notif_service.get_preferences(db)
+def get_preferences(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return notif_service.get_preferences(db, user_id=current_user.id)
 
 
 @router.put("/preferences", response_model=NotificationPreferences)
 def update_preferences(
     prefs: NotificationPreferences,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return notif_service.update_preferences(db, prefs)
+    return notif_service.update_preferences(db, prefs, user_id=current_user.id)

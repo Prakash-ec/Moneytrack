@@ -1,18 +1,24 @@
-from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from datetime import datetime
 
-from app.db.base import Base
+from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.time import utc_now
+from app.db.base import Base, UTCDateTime
 
 
 class UserPreference(Base):
     __tablename__ = "user_preferences"
 
-    id = Column(Integer, primary_key=True, index=True)
-    key = Column(String(100), unique=True, nullable=False, index=True)
-    value = Column(Text, nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True),
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=utc_now,
+        onupdate=utc_now,
     )

@@ -62,7 +62,7 @@ export function TransactionRow({
           {expense.payment_method && (
             <>
               {!hideDate && <span>•</span>}
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-primary-soft text-primary font-medium uppercase tracking-wider">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-surface-raised text-muted border border-border font-medium">
                 {expense.payment_method}
               </span>
             </>
@@ -72,10 +72,10 @@ export function TransactionRow({
         {/* Explicit Note section: Clearly differentiated so note is never confused with Expense Type */}
         {note && (
           <div className="flex items-center gap-1.5 text-xs text-[var(--muted)] mt-1 truncate">
-            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] bg-[var(--surface-muted)] px-1.5 py-0.2 rounded border border-[var(--border)]">
+            <span className="shrink-0 text-[10px] font-medium text-muted bg-surface-raised px-1.5 py-0.5 rounded-md border border-border">
               Note
             </span>
-            <span className="truncate italic text-[var(--text)]/85 font-normal">
+            <span className="truncate text-text/80 font-normal">
               {note}
             </span>
           </div>
@@ -84,7 +84,7 @@ export function TransactionRow({
 
       {/* Right side: Tabular currency amount and action buttons */}
       <div className="shrink-0 text-right flex items-center gap-2 sm:gap-3">
-        <span className="transaction-amount font-mono tabular-nums text-sm font-bold text-[var(--text)]">
+        <span className="transaction-amount font-mono tabular-nums text-sm font-semibold text-text">
           {formatINR(expense.amount_paise)}
         </span>
         {(onEdit || onDelete) && (

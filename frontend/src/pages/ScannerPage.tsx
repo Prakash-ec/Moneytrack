@@ -226,7 +226,7 @@ export function ScannerPage() {
   return (
     <div className="narrow-page space-y-5">
       <PageHeader
-        eyebrow="SMART CAPTURE"
+        eyebrow="Receipt capture"
         title="Scan a receipt"
         description="Extract expense details from an image or receipt text."
         actions={

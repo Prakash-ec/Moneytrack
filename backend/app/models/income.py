@@ -22,6 +22,9 @@ class Income(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     income_type_id: Mapped[int] = mapped_column(
         ForeignKey("income_types.id", ondelete="RESTRICT"), nullable=False, index=True
     )

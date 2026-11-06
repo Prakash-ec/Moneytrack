@@ -17,16 +17,22 @@ from app.schemas.bank_account import (
 from app.schemas.cashflow import AccountReconciliationRead
 
 
-def recalculate_account_balance(db: Session, account_id: int) -> int:
-    """Recalculates an account's balance from opening balance and confirmed transactions.
+def get_account(db: Session, account_id: int, user_id: int | None = None) -> BankAccount | None:
+    query = select(BankAccount).where(BankAccount.id == account_id)
+    if user_id is not None:
+        query = query.where(BankAccount.user_id == user_id)
+    return db.scalar(query)
 
-    Calculated Balance = Opening Balance + Confirmed Incomes - Confirmed Expenses + Transfers In - Transfers Out
+
+def recalculate_account_balance(db: Session, account_id: int, commit: bool = True) -> int:
+    """Calculates ledger balance: Opening + Incomes - Expenses + TransfersIn - TransfersOut.
+    Updates account.current_balance_paise in the database.
     """
     account = db.get(BankAccount, account_id)
     if not account:
         return 0
 
-    # Total confirmed incomes
+    # Total confirmed income
     income_sum = (
         db.scalar(
             select(func.coalesce(func.sum(Income.amount_paise), 0)).where(
@@ -83,22 +89,25 @@ def recalculate_account_balance(db: Session, account_id: int) -> int:
             account.reconciliation_status = "discrepancy"
 
     account.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    if commit:
+        db.commit()
     return calculated
 
 
 def find_account_by_identifier(
-    db: Session, suffix: str | None = None, bank_name: str | None = None
+    db: Session,
+    suffix: str | None = None,
+    bank_name: str | None = None,
+    user_id: int | None = None,
 ) -> BankAccount | None:
-    """Matches an account based on last 4 digits (e.g. '4375') and/or bank name.
-    Matches against account_number_mask and account_name using last 4 digits.
-    """
+    """Matches an account based on last 4 digits (e.g. '4375') and/or bank name."""
     query = select(BankAccount).where(BankAccount.is_archived.is_(False))
+    if user_id is not None:
+        query = query.where(BankAccount.user_id == user_id)
     accounts = list(db.scalars(query).all())
     if not accounts:
         return None
 
-    # Extract target 4 digits from suffix (handles 'XXXXXXXX4375', '4375', 'XX4375', etc.)
     target_digits = ""
     if suffix:
         digits_only = re.sub(r"\D", "", str(suffix))
@@ -119,43 +128,37 @@ def find_account_by_identifier(
             acc_bank = (acc.bank_name or "").lower()
             acc_name = (acc.account_name or "").lower()
 
-            matches_digits = (mask_4 == target_digits) or (name_4 == target_digits)
-            matches_bank = (
-                clean_bank in acc_bank
-                or acc_bank in clean_bank
-                or clean_bank in acc_name
-            )
-            if matches_digits and matches_bank:
+            if (target_digits in (mask_4, name_4)) and (
+                clean_bank in acc_bank or clean_bank in acc_name
+            ):
                 return acc
 
-    # 2. Match by last 4 digits alone
+    # 2. Match by last 4 digits in mask or account name
     if target_digits:
         for acc in accounts:
             mask_4 = extract_4_digits(acc.account_number_mask)
             name_4 = extract_4_digits(acc.account_name)
-            if (mask_4 == target_digits) or (name_4 == target_digits):
+            if target_digits in (mask_4, name_4):
                 return acc
 
-    # 3. Match by bank name alone if unique
+    # 3. Match by bank name alone
     if bank_name:
         clean_bank = bank_name.lower().strip()
-        matching_bank = [
-            acc
-            for acc in accounts
-            if clean_bank in (acc.bank_name or "").lower()
-            or (acc.bank_name or "").lower() in clean_bank
-        ]
-        if len(matching_bank) == 1:
-            return matching_bank[0]
+        for acc in accounts:
+            if clean_bank in (acc.bank_name or "").lower():
+                return acc
 
     return None
 
 
 def record_reported_balance(
-    db: Session, account_id: int, reported_paise: int, source: str = "sms"
+    db: Session,
+    account_id: int,
+    reported_paise: int,
+    source: str = "sms",
+    user_id: int | None = None,
 ) -> BankAccount | None:
-    """Records an available balance reported by bank notification without overwriting the ledger."""
-    account = db.get(BankAccount, account_id)
+    account = get_account(db, account_id, user_id=user_id)
     if not account:
         return None
 
@@ -167,6 +170,7 @@ def record_reported_balance(
 
     # Save balance snapshot for audit
     snapshot = BalanceSnapshot(
+        user_id=user_id or account.user_id,
         account_id=account_id,
         snapshot_date=date.today(),
         calculated_balance_paise=account.current_balance_paise,
@@ -180,16 +184,19 @@ def record_reported_balance(
     return account
 
 
-def list_accounts(db: Session, include_archived: bool = False) -> BankAccountList:
+def list_accounts(
+    db: Session,
+    user_id: int | None = None,
+    include_archived: bool = False,
+) -> BankAccountList:
     query = select(BankAccount).order_by(BankAccount.bank_name.asc(), BankAccount.id.asc())
+    if user_id is not None:
+        query = query.where(BankAccount.user_id == user_id)
     if not include_archived:
         query = query.where(BankAccount.is_archived.is_(False))
     items = list(db.scalars(query).all())
 
-    # Ensure balances are up to date
-    for acc in items:
-        recalculate_account_balance(db, acc.id)
-
+    # Pure read operation: balances are maintained at transaction mutation time
     total_balance = sum(acc.current_balance_paise for acc in items if not acc.is_archived)
     total_reported = sum(
         acc.last_reported_balance_paise
@@ -211,8 +218,13 @@ def list_accounts(db: Session, include_archived: bool = False) -> BankAccountLis
     )
 
 
-def create_account(db: Session, payload: BankAccountCreate) -> BankAccount:
+def create_account(
+    db: Session,
+    payload: BankAccountCreate,
+    user_id: int | None = None,
+) -> BankAccount:
     account = BankAccount(
+        user_id=user_id,
         bank_name=payload.bank_name.strip(),
         account_name=payload.account_name.strip(),
         account_type=payload.account_type,
@@ -232,8 +244,13 @@ def create_account(db: Session, payload: BankAccountCreate) -> BankAccount:
     return account
 
 
-def update_account(db: Session, account_id: int, payload: BankAccountUpdate) -> BankAccount | None:
-    account = db.get(BankAccount, account_id)
+def update_account(
+    db: Session,
+    account_id: int,
+    payload: BankAccountUpdate,
+    user_id: int | None = None,
+) -> BankAccount | None:
+    account = get_account(db, account_id, user_id=user_id)
     if not account:
         return None
 
@@ -250,8 +267,8 @@ def update_account(db: Session, account_id: int, payload: BankAccountUpdate) -> 
     return account
 
 
-def delete_account(db: Session, account_id: int) -> bool:
-    account = db.get(BankAccount, account_id)
+def delete_account(db: Session, account_id: int, user_id: int | None = None) -> bool:
+    account = get_account(db, account_id, user_id=user_id)
     if not account:
         return False
     account.is_archived = True
@@ -260,13 +277,17 @@ def delete_account(db: Session, account_id: int) -> bool:
     return True
 
 
-def get_reconciliation_summary(db: Session) -> list[AccountReconciliationRead]:
+def get_reconciliation_summary(
+    db: Session,
+    user_id: int | None = None,
+) -> list[AccountReconciliationRead]:
     query = select(BankAccount).where(BankAccount.is_archived.is_(False))
+    if user_id is not None:
+        query = query.where(BankAccount.user_id == user_id)
     accounts = list(db.scalars(query).all())
     results: list[AccountReconciliationRead] = []
 
     for acc in accounts:
-        recalculate_account_balance(db, acc.id)
         discrepancy = 0
         if acc.last_reported_balance_paise is not None:
             discrepancy = acc.current_balance_paise - acc.last_reported_balance_paise

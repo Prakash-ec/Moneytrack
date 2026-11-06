@@ -195,10 +195,10 @@ function Topbar({
             <button
               type="button"
               onClick={onOpenSearch}
-              className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 text-xs text-muted bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 text-xs text-muted bg-[var(--surface-raised)] hover:bg-[var(--surface)] border border-[var(--border)] rounded-lg transition-colors focus:outline-none focus:border-primary"
               aria-label="Search and command palette"
             >
-              <Search className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              <Search className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
               <span>Search or command…</span>
               <kbd className="ml-1 font-mono text-[10px] bg-[var(--surface)] px-1.5 py-0.5 rounded border border-[var(--border)] text-muted">
                 ⌘K

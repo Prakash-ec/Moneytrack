@@ -33,6 +33,9 @@ class Budget(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     budget_period: Mapped[date] = mapped_column(
         Date, nullable=False, index=True,
         comment="First day of the budget month (e.g. 2026-01-01 for January 2026)"
@@ -61,6 +64,9 @@ class CategoryBudget(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     budget_period: Mapped[date] = mapped_column(
         Date, nullable=False, index=True,
         comment="First day of the budget month"

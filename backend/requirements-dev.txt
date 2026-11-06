@@ -1,0 +1,17 @@
+# Development and Quality Assurance Toolchain for MoneyTrack
+-r requirements.txt
+
+# Automated Testing & Coverage
+pytest>=8.3.4
+pytest-cov>=7.0.0
+pytest-asyncio>=1.4.0
+
+# Code Quality, Linting & Formatting
+ruff>=0.9.0
+
+# Static Type Checking
+mypy>=1.14.0
+
+# Security Auditing
+bandit>=1.8.0
+pip-audit>=2.8.0

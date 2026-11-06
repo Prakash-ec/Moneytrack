@@ -194,7 +194,7 @@ export function IncomePage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="FINANCES"
+        eyebrow="Cashflow"
         title="Income & Earnings"
         description={`${formatRangeLabel(period.range)} · Inflows`}
         actions={
@@ -216,10 +216,10 @@ export function IncomePage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
         <div className="card p-4 sm:p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
-            Total Inflow
+          <div className="text-xs font-medium text-muted mb-1">
+            Total inflow
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-500 font-display">
+          <div className="text-2xl sm:text-3xl font-semibold text-primary font-mono tabular-nums">
             {formatINR(totalInflowPaise)}
           </div>
           <div className="text-[11px] text-muted mt-1">
@@ -228,20 +228,20 @@ export function IncomePage() {
         </div>
 
         <div className="card p-4 sm:p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
-            Average Inflow
+          <div className="text-xs font-medium text-muted mb-1">
+            Average inflow
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-text font-display">
+          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
             {incomes.length > 0 ? formatINR(Math.round(totalInflowPaise / incomes.length)) : '₹0'}
           </div>
           <div className="text-[11px] text-muted mt-1">Per recorded transaction</div>
         </div>
 
         <div className="card p-4 sm:p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
-            Linked Accounts
+          <div className="text-xs font-medium text-muted mb-1">
+            Linked accounts
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-sky-400 font-display">
+          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
             {bankAccounts.length}
           </div>
           <div className="text-[11px] text-muted mt-1">Active receiving accounts</div>
@@ -256,8 +256,8 @@ export function IncomePage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search payer, note, reference..."
-            className="w-full pl-9 pr-8 py-2 rounded-xl bg-surface border border-border text-xs text-text placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder="Search payer, note, reference…"
+            className="w-full pl-9 pr-8 py-2 rounded-lg bg-surface border border-border text-xs text-text placeholder:text-muted focus:outline-none focus:border-primary"
           />
           {search && (
             <button
@@ -274,9 +274,9 @@ export function IncomePage() {
           <select
             value={selectedAccountId ?? ''}
             onChange={(e) => setSelectedAccountId(e.target.value ? Number(e.target.value) : undefined)}
-            className="py-2 px-3 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+            className="py-2 px-3 rounded-lg bg-surface border border-border text-xs text-text focus:outline-none"
           >
-            <option value="">All Accounts</option>
+            <option value="">All accounts</option>
             {bankAccounts.map((acc) => (
               <option key={acc.id} value={acc.id}>
                 {acc.name} ({acc.bank_name})
@@ -287,9 +287,9 @@ export function IncomePage() {
           <select
             value={selectedTypeId ?? ''}
             onChange={(e) => setSelectedTypeId(e.target.value ? Number(e.target.value) : undefined)}
-            className="py-2 px-3 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+            className="py-2 px-3 rounded-lg bg-surface border border-border text-xs text-text focus:outline-none"
           >
-            <option value="">All Categories</option>
+            <option value="">All categories</option>
             {incomeTypes.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
@@ -304,10 +304,10 @@ export function IncomePage() {
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-surface-raised border-b border-border text-muted font-bold uppercase tracking-wider text-[10px]">
+              <thead className="bg-surface-raised border-b border-border text-muted font-medium text-xs">
                 <tr>
                   <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Source / Payer</th>
+                  <th className="py-3 px-4">Source / payer</th>
                   <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4">Account</th>
                   <th className="py-3 px-4 text-right">Amount</th>
@@ -317,18 +317,18 @@ export function IncomePage() {
               <tbody className="divide-y divide-border/60">
                 {incomes.map((income) => (
                   <tr key={income.id} className="hover:bg-surface-raised/50 transition-colors">
-                    <td className="py-3.5 px-4 font-mono text-muted whitespace-nowrap">
+                    <td className="py-3.5 px-4 font-mono tabular-nums text-muted whitespace-nowrap">
                       {formatDate(income.income_date)}
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text">
+                      <div className="font-medium text-text">
                         {income.payer || income.income_type?.name || 'Income'}
                       </div>
                       {income.note && (
                         <div className="text-[11px] text-muted truncate max-w-xs">{income.note}</div>
                       )}
                       {income.reference && (
-                        <div className="text-[10px] font-mono text-muted/75">Ref: {income.reference}</div>
+                        <div className="text-[10px] font-mono tabular-nums text-muted/75">Ref: {income.reference}</div>
                       )}
                     </td>
                     <td className="py-3.5 px-4">
@@ -336,16 +336,16 @@ export function IncomePage() {
                     </td>
                     <td className="py-3.5 px-4">
                       {income.account || (income as any).bank_account ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-400/20">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted bg-surface-raised px-2 py-0.5 rounded-md border border-border font-mono tabular-nums">
                           {(income.account || (income as any).bank_account)?.bank_name}
                           {(income.account || (income as any).bank_account)?.account_number_mask &&
-                            ` ••${(income.account || (income as any).bank_account)?.account_number_mask}`}
+                            ` · ••${(income.account || (income as any).bank_account)?.account_number_mask}`}
                         </span>
                       ) : (
                         <span className="text-muted text-[11px]">Unlinked</span>
                       )}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-400 text-sm whitespace-nowrap">
+                    <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-primary text-sm whitespace-nowrap">
                       +{formatINR(income.amount_paise)}
                     </td>
                     <td className="py-3.5 px-4 text-center">

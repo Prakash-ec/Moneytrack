@@ -1,0 +1,10 @@
+# Bandit Security Scanner Configuration for MoneyTrack (YAML format)
+exclude_dirs:
+  - "/tests"
+  - "/alembic"
+  - "/.venv"
+# B104: Binding to 0.0.0.0 is intentional and necessary for containerized hosting on Render / Docker.
+# B106: False positive on standard OAuth2 / JWT bearer token string literal ("bearer").
+skips:
+  - "B104"
+  - "B106"

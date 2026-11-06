@@ -20,6 +20,9 @@ class AccountTransfer(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     from_account_id: Mapped[int] = mapped_column(
         ForeignKey("bank_accounts.id", ondelete="RESTRICT"), nullable=False, index=True
     )

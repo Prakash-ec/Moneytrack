@@ -333,7 +333,7 @@ export function SettingsPage() {
   return (
     <div className="narrow-page space-y-6">
       <PageHeader
-        eyebrow="PREFERENCES"
+        eyebrow="Preferences"
         title="Settings"
         description="Manage appearance, connectivity, and your local data."
       />

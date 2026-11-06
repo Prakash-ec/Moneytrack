@@ -225,7 +225,7 @@ export function BankAccountsPage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="BANKING & LEDGER"
+        eyebrow="Banking & accounts"
         title="Bank Accounts & Reconciliation"
         description="Multi-account tracking with automatic SMS reconciliation"
         actions={
@@ -239,14 +239,14 @@ export function BankAccountsPage() {
       />
 
       {/* Consolidated Balance Card */}
-      <div className="card p-5 sm:p-6 mb-6 bg-gradient-to-br from-surface to-surface-raised border border-border">
+      <div className="card p-5 sm:p-6 mb-6 bg-surface border border-border">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
-              <Building2 className="h-4 w-4 text-sky-400" aria-hidden="true" />
-              <span>Consolidated Net Balance</span>
+            <div className="text-xs font-medium text-muted mb-1 flex items-center gap-1.5">
+              <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
+              <span>Consolidated net balance</span>
             </div>
-            <div className="text-3xl sm:text-4xl font-extrabold text-text font-display">
+            <div className="text-3xl sm:text-4xl font-semibold text-text font-mono tabular-nums">
               {formatINR(consolidatedPaise)}
             </div>
             <div className="text-xs text-muted mt-1">
@@ -255,20 +255,20 @@ export function BankAccountsPage() {
           </div>
 
           <div className="sm:text-right pt-3 sm:pt-0 border-t sm:border-t-0 border-border">
-            <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
-              Bank-Reported Total (SMS)
+            <div className="text-xs font-medium text-muted mb-1">
+              Bank-reported total (SMS)
             </div>
-            <div className="text-2xl font-extrabold text-sky-300 font-display">
+            <div className="text-2xl font-semibold text-text font-mono tabular-nums">
               {formatINR(reportedPaise)}
             </div>
             <div className="mt-1.5">
               {discrepancyPaise === 0 ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-400/20">
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary-soft px-2 py-0.5 rounded-md">
                   <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                  <span>100% Balanced with SMS</span>
+                  <span>Reconciled with SMS</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-400/20">
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning bg-warning-soft px-2 py-0.5 rounded-md font-mono tabular-nums">
                   <AlertTriangle className="h-3 w-3" aria-hidden="true" />
                   <span>Variance: {formatINR(Math.abs(discrepancyPaise))}</span>
                 </span>
@@ -288,29 +288,29 @@ export function BankAccountsPage() {
             return (
               <div
                 key={account.id}
-                className="card p-5 hover:border-primary/40 transition-all flex flex-col justify-between"
+                className="card p-5 hover:border-border-strong transition-colors flex flex-col justify-between"
               >
                 <div>
                   {/* Account Header */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-400/20">
+                      <div className="p-2 rounded-lg bg-surface-raised text-muted border border-border">
                         {account.account_type === 'credit_card' ? (
-                          <CreditCard className="h-5 w-5" aria-hidden="true" />
+                          <CreditCard className="h-4 w-4" aria-hidden="true" />
                         ) : account.account_type === 'cash' || account.account_type === 'wallet' ? (
-                          <Wallet className="h-5 w-5" aria-hidden="true" />
+                          <Wallet className="h-4 w-4" aria-hidden="true" />
                         ) : (
-                          <Building2 className="h-5 w-5" aria-hidden="true" />
+                          <Building2 className="h-4 w-4" aria-hidden="true" />
                         )}
                       </div>
                       <div>
-                        <div className="font-bold text-base text-text flex items-center gap-2">
+                        <div className="font-semibold text-base text-text flex items-center gap-2">
                           <span>{account.name || (account as any).account_name}</span>
                           {account.is_primary && (
                             <Badge tone="primary">Primary</Badge>
                           )}
                         </div>
-                        <div className="text-xs text-muted">
+                        <div className="text-xs text-muted font-mono tabular-nums">
                           {account.bank_name} {account.account_number_mask && `· ••${account.account_number_mask}`}
                         </div>
                       </div>
@@ -320,12 +320,12 @@ export function BankAccountsPage() {
                   </div>
 
                   {/* Balance Display */}
-                  <div className="my-4 p-3.5 rounded-xl bg-surface-raised/70 border border-border">
+                  <div className="my-4 p-3.5 rounded-lg bg-surface-raised border border-border">
                     <div className="flex items-baseline justify-between mb-2">
-                      <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                        Current Calculated Balance
+                      <span className="text-xs font-medium text-muted">
+                        Current calculated balance
                       </span>
-                      <span className="text-xl sm:text-2xl font-extrabold text-text font-display">
+                      <span className="text-xl sm:text-2xl font-semibold text-text font-mono tabular-nums">
                         {formatINR(account.current_balance_paise)}
                       </span>
                     </div>

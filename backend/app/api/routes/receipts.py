@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.expense_type import ExpenseType
+from app.models.user import User
 from app.schemas.receipt import ReceiptParseResponse, ReceiptTextRequest
 from app.services.ocr import OCRUnavailableError, get_ocr_provider, validate_image_bytes
 from app.services.receipt_parser import get_receipt_parser
@@ -18,10 +21,16 @@ router = APIRouter(prefix="/receipts", tags=["Receipts"])
 )
 async def parse_receipt(
     request: Request,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ReceiptParseResponse:
     existing_types = list(
-        db.scalars(select(ExpenseType).where(ExpenseType.is_archived.is_(False))).all()
+        db.scalars(
+            select(ExpenseType).where(
+                ExpenseType.is_archived.is_(False),
+                (ExpenseType.user_id == current_user.id) | (ExpenseType.user_id.is_(None)),
+            )
+        ).all()
     )
     parser = get_receipt_parser()
     content_type = request.headers.get("content-type", "")
@@ -40,7 +49,7 @@ async def parse_receipt(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Please provide receipt text to parse.",
             )
-        return parser.parse(text, existing_types)
+        return await run_in_threadpool(parser.parse, text, existing_types)
 
     # Case 2: Multipart form data with file or text
     if "multipart/form-data" in content_type:
@@ -61,44 +70,42 @@ async def parse_receipt(
                     status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
                 ) from exc
 
-            scan_mode = str(form.get("scan_mode") or "both").strip().lower()
-            if scan_mode not in {"ocr", "groq", "both"}:
+            scan_mode = form.get("scan_mode") or "both"
+            if scan_mode not in ("ocr", "groq", "both"):
                 scan_mode = "both"
 
-            parser = get_receipt_parser()
-            if hasattr(parser, "parse_image"):
+            if scan_mode in ("groq", "both"):
                 try:
-                    return parser.parse_image(image_bytes, existing_types, scan_mode=scan_mode)
-                except OCRUnavailableError as exc:
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-                    ) from exc
+                    ai_result = await run_in_threadpool(parser.parse_image, image_bytes, existing_types, scan_mode="groq")
+                    if ai_result is not None:
+                        return ai_result
                 except Exception as exc:
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail="Failed to parse receipt image. Please paste receipt text manually.",
-                    ) from exc
+                    if scan_mode == "groq":
+                        raise HTTPException(
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="AI receipt scanning is currently unavailable. Please try again or paste text manually.",
+                        ) from exc
 
             ocr_provider = get_ocr_provider()
             if not ocr_provider.is_available():
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Receipt scanning is currently unavailable on this server. "
+                    detail="Receipt image analysis is currently unavailable on this server. "
                     "You can still paste receipt text manually or enter expenses directly.",
                 )
 
             try:
-                extracted_text = ocr_provider.extract_text(image_bytes)
+                extracted_text = await run_in_threadpool(ocr_provider.extract_text, image_bytes)
             except OCRUnavailableError as exc:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
                 ) from exc
 
-            return parser.parse(extracted_text, existing_types)
+            return await run_in_threadpool(parser.parse, extracted_text, existing_types)
 
         text = form.get("text")
         if text and str(text).strip():
-            return parser.parse(str(text).strip(), existing_types)
+            return await run_in_threadpool(parser.parse, str(text).strip(), existing_types)
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -113,15 +120,9 @@ async def parse_receipt(
 )
 async def parse_receipt_text(
     payload: ReceiptTextRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ReceiptParseResponse:
-    """Extract a proposed expense from pasted receipt text.
-
-    The text is trimmed and validated server-side. Groq AI performs the
-    extraction with a local rule-based fallback; nothing is persisted here.
-    The Groq API key and model are backend-only and are never accepted from
-    the client.
-    """
     text = (payload.text or "").strip()
     if not text:
         raise HTTPException(
@@ -130,7 +131,12 @@ async def parse_receipt_text(
         )
 
     existing_types = list(
-        db.scalars(select(ExpenseType).where(ExpenseType.is_archived.is_(False))).all()
+        db.scalars(
+            select(ExpenseType).where(
+                ExpenseType.is_archived.is_(False),
+                (ExpenseType.user_id == current_user.id) | (ExpenseType.user_id.is_(None)),
+            )
+        ).all()
     )
     parser = get_receipt_parser()
-    return parser.parse_text(text, existing_types)
+    return await run_in_threadpool(parser.parse_text, text, existing_types)

@@ -9,8 +9,21 @@ from app.schemas.income import IncomeCreate, IncomeList, IncomeRead, IncomeUpdat
 from app.services.bank_accounts import recalculate_account_balance
 
 
+def get_income(db: Session, income_id: int, user_id: int | None = None) -> Income | None:
+    query = (
+        select(Income)
+        .options(joinedload(Income.income_type), joinedload(Income.bank_account))
+        .where(Income.id == income_id)
+    )
+    if user_id is not None:
+        query = query.where(Income.user_id == user_id)
+    return db.scalar(query)
+
+
 def list_incomes(
     db: Session,
+    *,
+    user_id: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     income_type_id: int | None = None,
@@ -24,6 +37,8 @@ def list_incomes(
         joinedload(Income.bank_account),
     )
 
+    if user_id is not None:
+        query = query.where(Income.user_id == user_id)
     if start_date:
         query = query.where(Income.income_date >= start_date)
     if end_date:
@@ -78,16 +93,23 @@ def list_incomes(
 
 
 def create_income(
-    db: Session, payload: IncomeCreate, idempotency_key: str | None = None
+    db: Session,
+    payload: IncomeCreate,
+    *,
+    user_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> tuple[Income, bool]:
     """Creates an income record or returns existing one if idempotent key matches."""
     effective_key = idempotency_key or getattr(payload, "idempotency_key", None)
     if effective_key:
-        existing = db.scalar(
+        stmt = (
             select(Income)
             .options(joinedload(Income.income_type), joinedload(Income.bank_account))
             .where(Income.idempotency_key == effective_key)
         )
+        if user_id is not None:
+            stmt = stmt.where(Income.user_id == user_id)
+        existing = db.scalar(stmt)
         if existing:
             return existing, True
 
@@ -95,6 +117,7 @@ def create_income(
     ref = payload.bank_reference or payload.reference
 
     income = Income(
+        user_id=user_id,
         income_type_id=payload.income_type_id,
         account_id=payload.account_id,
         amount_paise=payload.amount_paise,
@@ -119,8 +142,14 @@ def create_income(
     return income, False
 
 
-def update_income(db: Session, income_id: int, payload: IncomeUpdate) -> Income | None:
-    income = db.get(Income, income_id)
+def update_income(
+    db: Session,
+    income_id: int,
+    payload: IncomeUpdate,
+    *,
+    user_id: int | None = None,
+) -> Income | None:
+    income = get_income(db, income_id, user_id=user_id)
     if not income:
         return None
 
@@ -152,8 +181,8 @@ def update_income(db: Session, income_id: int, payload: IncomeUpdate) -> Income 
     return income
 
 
-def delete_income(db: Session, income_id: int) -> bool:
-    income = db.get(Income, income_id)
+def delete_income(db: Session, income_id: int, user_id: int | None = None) -> bool:
+    income = get_income(db, income_id, user_id=user_id)
     if not income:
         return False
 

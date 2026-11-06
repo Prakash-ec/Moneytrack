@@ -4,8 +4,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.core.constants import PaymentMethod
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.expense import ExpenseCreate, ExpensePage, ExpenseRead, ExpenseUpdate
 from app.services import expenses as service
 from app.services.expenses import SortOrder
@@ -29,6 +31,7 @@ def list_expenses(
     sort: SortOrder = Query(default="date_desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=200),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpensePage:
     if start_date and end_date and start_date > end_date:
@@ -39,6 +42,7 @@ def list_expenses(
         )
     return service.list_expenses(
         db,
+        user_id=current_user.id,
         start_date=start_date,
         end_date=end_date,
         expense_type_id=expense_type_id,
@@ -58,28 +62,36 @@ def create_expense(
     payload: ExpenseCreate,
     response: Response,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpenseRead:
-    expense, replayed = service.create_expense(db, payload, idempotency_key=idempotency_key)
+    expense, replayed = service.create_expense(
+        db, payload, user_id=current_user.id, idempotency_key=idempotency_key
+    )
     if replayed:
-        # Same idempotency key already created this expense: a replay, not a
-        # new expense. Tell the client so it can treat the result as existing.
         response.status_code = status.HTTP_200_OK
         response.headers[IDEMPOTENT_REPLAY_HEADER] = "true"
     return expense
 
 
 @router.get("/{expense_id}", response_model=ExpenseRead, summary="Get one expense")
-def get_expense(expense_id: int, db: Session = Depends(get_db)) -> ExpenseRead:
-    return ExpenseRead.model_validate(service.get_expense(db, expense_id))
+def get_expense(
+    expense_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ExpenseRead:
+    return ExpenseRead.model_validate(service.get_expense(db, expense_id, user_id=current_user.id))
 
 
 @router.patch("/{expense_id}", response_model=ExpenseRead, summary="Edit an expense")
 @router.put("/{expense_id}", response_model=ExpenseRead, summary="Edit an expense (PUT)")
 def update_expense(
-    expense_id: int, payload: ExpenseUpdate, db: Session = Depends(get_db)
+    expense_id: int,
+    payload: ExpenseUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> ExpenseRead:
-    return service.update_expense(db, expense_id, payload)
+    return service.update_expense(db, expense_id, payload, user_id=current_user.id)
 
 
 @router.delete(
@@ -87,6 +99,10 @@ def update_expense(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an expense",
 )
-def delete_expense(expense_id: int, db: Session = Depends(get_db)) -> Response:
-    service.delete_expense(db, expense_id)
+def delete_expense(
+    expense_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    service.delete_expense(db, expense_id, user_id=current_user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

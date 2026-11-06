@@ -405,8 +405,8 @@
 .eyebrow {
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  text-transform: none;
   color: var(--muted);
   margin-bottom: 4px;
 }
@@ -752,7 +752,7 @@
 }
 
 .stat-value {
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   margin: 8px 0 4px;
   font-size: clamp(18px, 4.5vw, 22px);
   font-weight: 600;
@@ -776,19 +776,6 @@
   font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
-}
-
-.stat-value {
-  font-size: clamp(20px, 5.2vw, 26px);
-  font-weight: 700;
-  line-height: 1.15;
-  display: block;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .stat-detail {
@@ -876,9 +863,9 @@
 }
 
 .segmented button.active {
-  color: #fff;
-  background: var(--primary-gradient);
-  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  color: var(--primary-contrast);
+  background: var(--primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   font-weight: 600;
 }
 
