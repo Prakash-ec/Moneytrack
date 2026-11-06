@@ -244,3 +244,55 @@ export function SlowNetworkBanner() {
     </div>
   )
 }
+
+export function BackendWakingBanner() {
+  const [waking, setWaking] = React.useState(false)
+  const [recovered, setRecovered] = React.useState(false)
+
+  React.useEffect(() => {
+    let timer: any
+    const handleWaking = (e: Event) => {
+      const customEvent = e as CustomEvent<{ waking?: boolean; recovered?: boolean; attempt?: number }>
+      const detail = customEvent.detail || {}
+      if (detail.waking) {
+        setWaking(true)
+        setRecovered(false)
+      } else if (detail.recovered) {
+        setWaking(false)
+        setRecovered(true)
+        clearTimeout(timer)
+        timer = setTimeout(() => setRecovered(false), 2500)
+      } else {
+        setWaking(false)
+      }
+    }
+
+    window.addEventListener('moneytrack:backend-waking', handleWaking)
+    return () => {
+      window.removeEventListener('moneytrack:backend-waking', handleWaking)
+      clearTimeout(timer)
+    }
+  }, [])
+
+  if (recovered) {
+    return (
+      <div className="sticky top-0 z-50 flex items-center justify-between bg-emerald-600/95 px-4 py-2 text-xs font-medium text-white backdrop-blur-md shadow-md transition-all">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-emerald-200 animate-pulse" />
+          <span>Connected to MoneyTrack server! Live data synchronized.</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!waking) return null
+
+  return (
+    <div className="sticky top-0 z-50 flex items-center justify-between bg-amber-500/95 px-4 py-2.5 text-xs font-semibold text-slate-950 backdrop-blur-md shadow-md animate-pulse">
+      <div className="flex items-center gap-2">
+        <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-950" />
+        <span>Connecting to server... (Render instance is waking up from idle, please wait ~20s)</span>
+      </div>
+    </div>
+  )
+}

@@ -30,12 +30,13 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { CommandPalette } from '@/components/CommandPalette'
 import { useExpenseDialog } from '@/components/ExpenseDialogProvider'
 import { Modal } from '@/components/ui/Modal'
-import { OfflineBanner, SlowNetworkBanner } from '@/components/ui/States'
+import { BackendWakingBanner, OfflineBanner, SlowNetworkBanner } from '@/components/ui/States'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { useDataRefresh } from '@/providers/RefreshProvider'
 import { useTheme } from '@/providers/ThemeProvider'
 import { useToast } from '@/providers/ToastProvider'
 import { api } from '@/services/api'
+import { startKeepAliveService } from '@/services/keepAlive'
 import { flushOfflineQueue, getOfflineQueue } from '@/services/offlineQueue'
 import { SmsPlugin } from '@/services/sms'
 import { cn } from '@/utils/cn'
@@ -429,8 +430,16 @@ export function AppLayout() {
     }
   }, [online, offlineCount, syncingOffline, handleSyncOffline])
 
+  useEffect(() => {
+    const stopKeepAlive = startKeepAliveService()
+    return () => {
+      stopKeepAlive()
+    }
+  }, [])
+
   return (
     <div className="app-shell">
+      <BackendWakingBanner />
       <OfflineBanner />
       <SlowNetworkBanner />
       <a

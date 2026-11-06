@@ -30,7 +30,9 @@ backend/data/*.json
 backend/data/*.csv
 
 # Node and frontend build output
+node_modules/
 frontend/node_modules/
+.agents/
 frontend/dist/
 frontend/.vite/
 frontend/coverage/

@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # AI call falls back to local Tesseract OCR without blocking the user.
     groq_request_timeout: float = 20.0
 
+    # Keep-alive configuration to prevent container idle sleep on Render Free Tier.
+    keep_alive_enabled: bool = True
+    keep_alive_interval_minutes: int = 12
+    keep_alive_url: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=(BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env"),
         env_file_encoding="utf-8",

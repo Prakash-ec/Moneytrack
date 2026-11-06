@@ -23,6 +23,12 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: "qwen/qwen3.8-27b"
+      - key: KEEP_ALIVE_ENABLED
+        value: "true"
+      - key: KEEP_ALIVE_INTERVAL_MINUTES
+        value: "12"
+      - key: KEEP_ALIVE_URL
+        value: "https://moneytrack-backend-g5is.onrender.com"
 
   - type: web
     name: moneytrack-frontend

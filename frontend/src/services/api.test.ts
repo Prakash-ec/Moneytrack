@@ -365,4 +365,35 @@ describe('api.createExpenseType', () => {
     expect(body.merchant).toBe('Fresh Mart')
     expect(body.payment_method).toBe('UPI')
   })
+
+  it('retries on transient Render 502 Bad Gateway and recovers cleanly', async () => {
+    const wakingEvents: any[] = []
+    const mockWindow = {
+      dispatchEvent: (event: { detail: unknown }) => wakingEvents.push(event.detail),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }
+    vi.stubGlobal('window', mockWindow)
+
+    const badGatewayHtml = '<html><body>502 Bad Gateway</body></html>'
+    const successHealth = { status: 'ok', application: 'MoneyTrack', version: '1.0.0' }
+
+    // First call returns 502 HTML, second call recovers with 200 JSON
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockResponse(502, badGatewayHtml, 'text/html'))
+      .mockResolvedValueOnce(mockResponse(200, successHealth))
+
+    globalThis.fetch = fetchMock
+
+    const res = await api.health()
+    expect(res.status).toBe('ok')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    // Verify waking events were dispatched
+    expect(wakingEvents.some((e) => e.waking === true)).toBe(true)
+    expect(wakingEvents.some((e) => e.recovered === true)).toBe(true)
+
+    vi.unstubAllGlobals()
+  })
 })

@@ -171,96 +171,164 @@ function extractMessage(payload: unknown, fallback: string): string {
 export interface RequestOptions extends RequestInit {
   timeoutMs?: number
   idempotencyKey?: string
+  retries?: number
+  retryDelayMs?: number
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { timeoutMs = 15000, idempotencyKey, ...fetchOptions } = options
+  const method = (options.method ?? 'GET').toUpperCase()
+  const isIdempotent = ['GET', 'HEAD', 'OPTIONS'].includes(method) || Boolean(options.idempotencyKey)
+  const isTest = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MODE === 'test'
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  // Default retries: 2 for idempotent requests or requests with idempotencyKey, 0 for non-idempotent writes
+  const maxRetries = options.retries !== undefined ? options.retries : (isIdempotent ? 2 : 0)
+  const defaultDelay = isTest ? 10 : 2500
+  const retryDelayMs = options.retryDelayMs ?? defaultDelay
+  const timeoutMs = options.timeoutMs ?? 45000
 
-  let response: Response
-  const targetUrl = `${apiBase()}${path}`
-  const startMs = Date.now()
+  let attempt = 0
 
-  try {
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      ...((fetchOptions.body && !(fetchOptions.body instanceof FormData)) ? { 'Content-Type': 'application/json' } : {}),
-      ...(idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey, 'Idempotency-Key': idempotencyKey } : {}),
-      ...((fetchOptions.headers as Record<string, string>) ?? {}),
-    }
+  while (true) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-    response = await fetch(targetUrl, {
-      ...fetchOptions,
-      headers,
-      signal: controller.signal,
-    })
+    let response: Response | null = null
+    const targetUrl = `${apiBase()}${path}`
+    const startMs = Date.now()
 
-    const duration = Date.now() - startMs
-    if (duration > 2500 && typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('moneytrack:slow-network', { detail: { duration, path } })
-      )
-    }
-  } catch (err: unknown) {
-    clearTimeout(timeoutId)
-    if (err instanceof Error && err.name === 'AbortError') {
+    try {
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        ...((options.body && !(options.body instanceof FormData)) ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.idempotencyKey ? { 'X-Idempotency-Key': options.idempotencyKey, 'Idempotency-Key': options.idempotencyKey } : {}),
+        ...((options.headers as Record<string, string>) ?? {}),
+      }
+
+      response = await fetch(targetUrl, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      })
+
+      const duration = Date.now() - startMs
+      if (duration > 2500 && typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('moneytrack:slow-network', { detail: { duration, path } })
+        )
+      }
+    } catch (err: unknown) {
+      clearTimeout(timeoutId)
+      const isAbort = err instanceof Error && err.name === 'AbortError'
+
+      // Transient cold start timeout or connection failure: retry if retries left
+      if (attempt < maxRetries) {
+        attempt++
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('moneytrack:backend-waking', {
+              detail: { waking: true, attempt, maxRetries },
+            })
+          )
+        }
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt))
+        continue
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('moneytrack:backend-waking', { detail: { waking: false, failed: true } })
+        )
+      }
+
+      if (isAbort) {
+        throw new ApiError(
+          `Request to ${path} timed out after ${Math.round(timeoutMs / 1000)}s. Please check your network or server.`,
+          0,
+        )
+      }
       throw new ApiError(
-        `Request to ${path} timed out after ${Math.round(timeoutMs / 1000)}s. Please check your network or server.`,
+        'Could not reach the MoneyTrack API. Check that the backend server is running and the URL is correct.',
         0,
       )
+    } finally {
+      clearTimeout(timeoutId)
     }
-    throw new ApiError(
-      'Could not reach the MoneyTrack API. Check that the backend server is running and the URL is correct.',
-      0,
-    )
-  } finally {
-    clearTimeout(timeoutId)
-  }
 
-  // Read response text safely
-  const responseText = await response.text()
-  const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
-  const isHtml =
-    contentType.includes('text/html') ||
-    responseText.trim().toLowerCase().startsWith('<!doctype') ||
-    responseText.trim().toLowerCase().startsWith('<html')
+    // Read response text safely
+    const responseText = await response.text()
+    const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+    const isHtml =
+      contentType.includes('text/html') ||
+      responseText.trim().toLowerCase().startsWith('<!doctype') ||
+      responseText.trim().toLowerCase().startsWith('<html')
 
-  // Check if server returned HTML instead of JSON
-  if (isHtml) {
-    const msg =
-      `Received an HTML webpage instead of a JSON response (HTTP ${response.status}). ` +
-      `Check your Backend URL in Settings (ensure it reaches the MoneyTrack API).`
-    throw new ApiError(msg, response.status, { rawText: responseText.slice(0, 160) }, true)
-  }
+    // Handle Render cold start 502/503/504 gateway error pages
+    const isTransientGatewayError = [502, 503, 504].includes(response.status) || (isHtml && response.status >= 500)
+    if (isTransientGatewayError && attempt < maxRetries) {
+      attempt++
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('moneytrack:backend-waking', {
+            detail: { waking: true, attempt, maxRetries },
+          })
+        )
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt))
+      continue
+    }
 
-  if (!response.ok) {
-    let payload: unknown = null
+    // Check if server returned HTML instead of JSON
+    if (isHtml) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('moneytrack:backend-waking', { detail: { waking: false, failed: true } })
+        )
+      }
+      const msg =
+        `Received an HTML webpage instead of a JSON response (HTTP ${response.status}). ` +
+        `Check your Backend URL in Settings (ensure it reaches the MoneyTrack API).`
+      throw new ApiError(msg, response.status, { rawText: responseText.slice(0, 160) }, true)
+    }
+
+    if (!response.ok) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('moneytrack:backend-waking', { detail: { waking: false, failed: true } })
+        )
+      }
+      let payload: unknown = null
+      try {
+        if (responseText.trim()) payload = JSON.parse(responseText)
+      } catch {
+        payload = null
+      }
+      throw new ApiError(
+        extractMessage(payload, `Request failed with status ${response.status}.`),
+        response.status,
+        payload,
+      )
+    }
+
+    // Request succeeded! If we had prior wake attempts, notify that connection recovered
+    if (attempt > 0 && typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('moneytrack:backend-waking', { detail: { waking: false, recovered: true } })
+      )
+    }
+
+    if (response.status === 204 || !responseText.trim()) {
+      return undefined as T
+    }
+
     try {
-      if (responseText.trim()) payload = JSON.parse(responseText)
+      return JSON.parse(responseText) as T
     } catch {
-      payload = null
+      throw new ApiError(
+        `Invalid JSON received from server (HTTP ${response.status}).`,
+        response.status,
+        { rawText: responseText.slice(0, 160) },
+      )
     }
-    throw new ApiError(
-      extractMessage(payload, `Request failed with status ${response.status}.`),
-      response.status,
-      payload,
-    )
-  }
-
-  if (response.status === 204 || !responseText.trim()) {
-    return undefined as T
-  }
-
-  try {
-    return JSON.parse(responseText) as T
-  } catch {
-    throw new ApiError(
-      `Invalid JSON received from server (HTTP ${response.status}).`,
-      response.status,
-      { rawText: responseText.slice(0, 160) },
-    )
   }
 }
 
@@ -278,7 +346,7 @@ export async function testConnection(candidateUrl?: string): Promise<{
   const base = candidateUrl ? normalizeApiBaseUrl(candidateUrl) : apiBase()
   const targetUrl = `${base}/health`
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 8000)
+  const timeoutId = setTimeout(() => controller.abort(), 25000)
 
   try {
     const res = await fetch(targetUrl, {

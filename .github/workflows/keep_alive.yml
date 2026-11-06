@@ -1,0 +1,32 @@
+name: Production Keep-Alive Ping
+
+on:
+  schedule:
+    # Run every 12 minutes to keep Render Free tier active (Render sleeps after 15 min idle)
+    - cron: '*/12 * * * *'
+  workflow_dispatch:
+    # Allows manual triggering from GitHub Actions tab anytime
+
+jobs:
+  ping-backend:
+    name: Ping Render Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping MoneyTrack Render API
+        run: |
+          echo "Starting keep-alive ping at $(date -u)"
+          URL="https://moneytrack-backend-g5is.onrender.com/health"
+          
+          # Curl with up to 45s timeout to allow waking if cold
+          RESPONSE=$(curl -s -L -w "\nHTTP_STATUS:%{http_code}\nTIME_TOTAL:%{time_total}s" --max-time 45 "$URL")
+          echo "$RESPONSE"
+          
+          STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS" | cut -d':' -f2)
+          if [ "$STATUS" = "200" ]; then
+            echo "SUCCESS: Render backend is awake and healthy (HTTP 200)."
+          else
+            echo "WARNING: Backend returned status $STATUS during ping. Trying fallback endpoint..."
+            curl -s -L -w "\nHTTP_STATUS:%{http_code}\n" --max-time 45 "https://moneytrack-backend-g5is.onrender.com/api/health"
+          fi

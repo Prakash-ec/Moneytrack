@@ -1,9 +1,13 @@
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 import mimetypes
+import os
 from pathlib import Path
 import re
+import sys
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -96,11 +100,69 @@ def seed_default_expense_types() -> None:
         logger.warning("Could not seed default expense types on startup: %s", exc)
 
 
+async def keep_alive_worker() -> None:
+    """Periodic background task that pings the public Render URL to prevent idling.
+    Render Free tier spins down web services after 15 minutes of inactivity.
+    An outbound HTTP ping across the internet to the public domain resets Render's idle timer.
+    """
+    # Wait 45 seconds after container startup before first ping so migrations and server binding are fully settled
+    await asyncio.sleep(45)
+
+    interval_seconds = max(60, settings.keep_alive_interval_minutes * 60)
+
+    while True:
+        try:
+            target = (
+                os.environ.get("RENDER_EXTERNAL_URL")
+                or settings.keep_alive_url
+                or "https://moneytrack-backend-g5is.onrender.com"
+            )
+            if target and target.startswith("http") and "localhost" not in target and "127.0.0.1" not in target:
+                ping_url = f"{target.rstrip('/')}/health"
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.get(ping_url)
+                    logger.info("Keep-alive self-ping to %s completed with status %d", ping_url, resp.status_code)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("Keep-alive self-ping encountered an error: %s", exc)
+
+        try:
+            await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            break
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     run_startup_migrations()
     seed_default_expense_types()
+
+    keep_alive_task = None
+    is_test = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST")
+    if settings.keep_alive_enabled and not is_test:
+        target = (
+            os.environ.get("RENDER_EXTERNAL_URL")
+            or settings.keep_alive_url
+            or "https://moneytrack-backend-g5is.onrender.com"
+        )
+        if target and target.startswith("http") and "localhost" not in target and "127.0.0.1" not in target:
+            keep_alive_task = asyncio.create_task(keep_alive_worker())
+            logger.info(
+                "Keep-alive worker registered for %s (interval: %d min).",
+                target,
+                settings.keep_alive_interval_minutes,
+            )
+
     yield
+
+    if keep_alive_task and not keep_alive_task.done():
+        keep_alive_task.cancel()
+        try:
+            await keep_alive_task
+        except asyncio.CancelledError:
+            pass
+
     try:
         from app.db.session import engine
         engine.dispose()
