@@ -1587,7 +1587,7 @@
   .app-main {
     margin-left: 0;
     width: 100%;
-    padding-bottom: 84px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
   }
 
   .mobile-brand {

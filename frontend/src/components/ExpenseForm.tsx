@@ -456,7 +456,15 @@ export function ExpenseForm({
     }
   }, [expense, scannedReceipt, prefill, selectableTypes, setValue, watch])
 
+  const lastSubmitTimeRef = useRef(0)
+
   const onSubmit = handleSubmit(async (values) => {
+    const now = Date.now()
+    if (now - lastSubmitTimeRef.current < 2000) {
+      return
+    }
+    lastSubmitTimeRef.current = now
+
     const amountPaise = parseRupeesToPaise(values.amount)
     if (!amountPaise || amountPaise <= 0) {
       setFormError('Please enter a valid amount greater than ₹0.')

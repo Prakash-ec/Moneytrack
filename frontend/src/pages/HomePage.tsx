@@ -3,10 +3,8 @@ import {
   ArrowRight,
   Building2,
   Calendar,
-  Percent,
   Plus,
   Receipt,
-  ReceiptText,
   SlidersHorizontal,
   Sparkles,
   TrendingUp,
@@ -17,7 +15,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { ComparisonBadge } from '@/components/ComparisonBadge'
-import { FintechCard3D } from '@/components/FintechCard3D'
+import { CashflowHeroCard } from '@/components/CashflowHeroCard'
 import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
 import { QuickChipsModal } from '@/components/QuickChipsModal'
@@ -35,7 +33,6 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { usePeriod } from '@/hooks/usePeriod'
 import { api } from '@/services/api'
 import { formatINR } from '@/utils/currency'
-import { formatDate } from '@/utils/dates'
 import { formatRangeLabel, suggestedGranularity } from '@/utils/periods'
 import { getStoredQuickChips, type QuickExpenseChip } from '@/utils/quickChips'
 
@@ -137,10 +134,10 @@ export function HomePage() {
         }
       />
 
-      {/* 3D Holographic Fintech Card & Quick Actions */}
+      {/* Financial Overview & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5 items-stretch">
         <div className="lg:col-span-5 flex flex-col justify-center">
-          <FintechCard3D
+          <CashflowHeroCard
             totalPaise={summary?.total_paise ?? 0}
             transactionCount={summary?.transaction_count ?? 0}
             periodLabel={formatRangeLabel(period.range)}
@@ -155,9 +152,6 @@ export function HomePage() {
             onTransfer={() => navigate('/transfers')}
             onScanReceipt={() => openScanReceipt()}
             onManageAccounts={() => navigate('/bank-accounts')}
-            onOpenSearch={() =>
-              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
-            }
           />
         </div>
 
@@ -295,16 +289,16 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* Cashflow & Financial Intelligence Grid */}
-      <section className="stat-grid mb-5" aria-label="Cashflow and savings metrics">
+      {/* Financial Metrics Grid - Consolidated & Free of Redundancy */}
+      <section className="stat-grid mb-5" aria-label="Key cashflow and spending metrics">
         <StatCard
-          label="Period Income"
+          label="Total Income"
           value={formatINR(cashflow?.total_income_paise ?? 0)}
           icon={ArrowDownLeft}
-          detail="Total credited inflows"
+          detail="Recorded inflows this period"
         />
         <StatCard
-          label="Period Outflow"
+          label="Total Expenses"
           value={formatINR(summary?.total_paise ?? 0)}
           icon={WalletCards}
           detail={
@@ -318,81 +312,28 @@ export function HomePage() {
                 <span>from last period</span>
               </span>
             ) : (
-              'All recorded expenses'
+              `${summary?.transaction_count ?? 0} transactions`
             )
           }
         />
         <StatCard
-          label="Net Cash Flow"
+          label="Net Cashflow"
           value={formatINR(cashflow?.net_cashflow_paise ?? 0)}
           icon={TrendingUp}
-          detail={(cashflow?.net_cashflow_paise ?? 0) >= 0 ? 'Net Surplus / Saved' : 'Deficit period'}
-        />
-        <StatCard
-          label="Savings Rate"
-          value={`${cashflow?.savings_rate_percent?.toFixed(1) ?? '0.0'}%`}
-          icon={Percent}
           detail={
-            cashflow?.consolidated_balance_paise != null
-              ? `Net Worth: ${formatINR(cashflow.consolidated_balance_paise)}`
-              : 'Active accounts'
-          }
-        />
-      </section>
-
-      <section className="stat-grid" aria-label="Key spending metrics">
-        <StatCard
-          label="Total spent"
-          value={formatINR(summary?.total_paise ?? 0)}
-          icon={WalletCards}
-          detail={
-            summary?.comparison ? (
-              <span className="flex items-center gap-1.5">
-                <ComparisonBadge
-                  direction={summary.comparison.direction}
-                  changePercent={summary.comparison.change_percent}
-                  changePaise={summary.comparison.change_paise}
-                />
-                <span>from last period</span>
-              </span>
-            ) : (
-              'Current period spend'
-            )
+            cashflow?.savings_rate_percent != null
+              ? `Savings rate: ${cashflow.savings_rate_percent.toFixed(1)}%`
+              : (cashflow?.net_cashflow_paise ?? 0) >= 0 ? 'Surplus' : 'Deficit'
           }
         />
         <StatCard
-          label="Transactions"
-          value={String(summary?.transaction_count ?? 0)}
-          icon={ReceiptText}
-          detail={
-            summary?.comparison?.previous_transaction_count != null ? (
-              <span>
-                {summary.transaction_count - summary.comparison.previous_transaction_count >= 0 ? '+' : ''}
-                {summary.transaction_count - summary.comparison.previous_transaction_count} vs last period
-              </span>
-            ) : (
-              'Recorded transactions'
-            )
-          }
-        />
-        <StatCard
-          label="Daily average"
+          label="Daily Average"
           value={formatINR(summary?.average_paise ?? 0)}
           icon={Calendar}
-          detail="Across active days"
-        />
-        <StatCard
-          label="Highest expense"
-          value={
-            summary?.highest_expense
-              ? formatINR(summary.highest_expense.amount_paise)
-              : '₹0.00'
-          }
-          icon={TrendingUp}
           detail={
             summary?.highest_expense
-              ? `${summary.highest_expense.expense_type?.name ?? 'Expense'} · ${formatDate(summary.highest_expense.expense_date)}`
-              : 'No recorded expenses'
+              ? `Peak: ${formatINR(summary.highest_expense.amount_paise)} (${summary.highest_expense.expense_type?.name ?? 'Expense'})`
+              : 'Across active days'
           }
         />
       </section>

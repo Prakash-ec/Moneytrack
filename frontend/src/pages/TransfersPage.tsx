@@ -149,7 +149,7 @@ export function TransfersPage() {
           <Info className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="text-xs text-muted leading-relaxed">
-          <strong className="text-text font-semibold">Non-Taxable Inter-Account Movement:</strong> Transfers between your own accounts adjust source and destination balances in the ledger without affecting income, expense, or consolidated net worth totals.
+          <strong className="text-text font-semibold">Non-Taxable Inter-Account Movement:</strong> Transfers between your own accounts adjust source and destination balances in the ledger without affecting income, expense, or consolidated balance totals.
         </div>
       </div>
 
