@@ -1,6 +1,6 @@
 """Tenant-aware unique constraints on budgets, category budgets, and types.
 
-Revision ID: 0008_tenant_aware_unique_constraints
+Revision ID: 0008_tenant_unique
 Revises: 0007_user_auth_and_tenancy
 Create Date: 2026-11-07
 """
@@ -9,7 +9,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0008_tenant_aware_unique_constraints"
+revision: str = "0008_tenant_unique"
 down_revision: str | None = "0007_user_auth_and_tenancy"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

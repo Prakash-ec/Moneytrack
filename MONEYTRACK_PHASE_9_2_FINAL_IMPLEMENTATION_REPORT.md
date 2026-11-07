@@ -36,7 +36,7 @@ Phase 9.2 concludes the remediation of all remaining security, integrity, and te
 - [`backend/app/models/budget.py`](file:///D:/MoneyTrack/backend/app/models/budget.py): Updated model `__table_args__` to `uq_budgets_user_period` and `uq_category_budgets_user_period_category`.
 - [`backend/app/models/expense_type.py`](file:///D:/MoneyTrack/backend/app/models/expense_type.py): Replaced global name_key index with partial tenant-aware unique indexes.
 - [`backend/app/models/income_type.py`](file:///D:/MoneyTrack/backend/app/models/income_type.py): Replaced global name_key index with partial tenant-aware unique indexes.
-- [`backend/alembic/versions/0008_tenant_aware_unique_constraints.py`](file:///D:/MoneyTrack/backend/alembic/versions/0008_tenant_aware_unique_constraints.py): *(New)* Migration script for tenant-aware constraints and partial indexes.
+- [`backend/alembic/versions/0008_tenant_unique.py`](file:///D:/MoneyTrack/backend/alembic/versions/0008_tenant_unique.py): *(New)* Migration script for tenant-aware constraints and partial indexes (identifier `0008_tenant_unique`, <= 32 chars).
 - [`backend/requirements.txt`](file:///D:/MoneyTrack/backend/requirements.txt): Updated `starlette>=0.45.2`, `fastapi>=0.115.8`, `pip>=24.3.1`, `setuptools>=75.8.0`.
 - [`backend/tests/test_phase_9_2_remediation.py`](file:///D:/MoneyTrack/backend/tests/test_phase_9_2_remediation.py): *(New)* 12 targeted unit and regression tests for Phase 9.2.
 
@@ -68,7 +68,7 @@ Phase 9.2 concludes the remediation of all remaining security, integrity, and te
 
 ## 4. MIGRATION 0008 DESIGN AND VERIFICATION
 
-Migration `0008_tenant_aware_unique_constraints.py` addresses multi-tenant conflicts:
+Migration `0008_tenant_unique.py` addresses multi-tenant conflicts:
 1. **Pre-flight Duplicate Check:** Runs queries on `budgets`, `category_budgets`, `expense_types`, and `income_types` to ensure clean state before applying constraints.
 2. **Budgets & Category Budgets:**
    - Drops `uq_budgets_one_per_period` -> Creates `uq_budgets_user_period` on `(user_id, budget_period)`.
@@ -229,7 +229,7 @@ When authorization is granted to deploy:
 1. Trigger Render deployment via Git push to `main` or Render manual deploy.
 2. Render build command will install updated `requirements.txt` (`pip`, `setuptools`, `fastapi`, `starlette`).
 3. Render start command executes: `cd backend && alembic upgrade head`.
-4. Migration `0008_tenant_aware_unique_constraints` will execute pre-flight checks, replace unique constraints, and create partial indexes on Neon PostgreSQL.
+4. Migration `0008_tenant_unique` will execute pre-flight checks, replace unique constraints, and create partial indexes on Neon PostgreSQL.
 5. Uvicorn boots up cleanly with startup migrations skipped (`RUN_STARTUP_MIGRATIONS=false`).
 
 ---

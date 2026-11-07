@@ -8,18 +8,20 @@ from sqlalchemy import engine_from_config, pool
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
+import app.models  # noqa: E402,F401  (registers models on Base.metadata)
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import ensure_sqlite_directory  # noqa: E402
-import app.models  # noqa: E402,F401  (registers models on Base.metadata)
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_url.replace("%", "%%"))
-ensure_sqlite_directory(settings.database_url)
+current_url = config.get_main_option("sqlalchemy.url")
+if not current_url or current_url == "sqlite:///data/moneytrack.db":
+    config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_url.replace("%", "%%"))
+    ensure_sqlite_directory(settings.database_url)
 
 target_metadata = Base.metadata
 
