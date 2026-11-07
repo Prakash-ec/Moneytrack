@@ -8,6 +8,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.moneytrack.app.security.SecureTokenStore
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -31,6 +32,13 @@ class WeeklyReportWorker(context: Context, params: WorkerParameters) : Worker(co
             return Result.success()
         }
 
+        val secureStore = SecureTokenStore(applicationContext)
+        val authToken = secureStore.getToken()
+        if (authToken.isNullOrBlank()) {
+            Log.d(TAG, "No authentication token present; skipping weekly report sync until user logs in.")
+            return Result.success()
+        }
+
         try {
             val endpointUrl = SyncWorker.buildEndpointUrl(backendUrl, "/api/reports/weekly")
             val url = URL(endpointUrl)
@@ -39,6 +47,7 @@ class WeeklyReportWorker(context: Context, params: WorkerParameters) : Worker(co
                 connectTimeout = 10000
                 readTimeout = 10000
                 setRequestProperty("Accept", "application/json")
+                setRequestProperty("Authorization", "Bearer $authToken")
             }
 
             val code = conn.responseCode
@@ -59,6 +68,10 @@ class WeeklyReportWorker(context: Context, params: WorkerParameters) : Worker(co
                     savingsRate
                 )
                 Log.i(TAG, "Weekly report notification posted successfully for $periodLabel")
+                return Result.success()
+            } else if (code == 401) {
+                Log.w(TAG, "Backend returned HTTP 401 (Authentication required/expired); skipping weekly report.")
+                conn.disconnect()
                 return Result.success()
             } else {
                 Log.w(TAG, "Backend returned HTTP $code when querying weekly report")

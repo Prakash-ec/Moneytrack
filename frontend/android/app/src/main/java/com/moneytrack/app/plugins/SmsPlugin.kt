@@ -16,6 +16,7 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
+import com.moneytrack.app.security.SecureTokenStore
 import com.moneytrack.app.sms.CandidateStatus
 import com.moneytrack.app.sms.SmsNotificationHelper
 import com.moneytrack.app.sms.SyncWorker
@@ -105,6 +106,37 @@ class SmsPlugin : Plugin() {
         result.put("smsAutomationEnabled", settings.smsAutomationEnabled)
         result.put("backendUrl", settings.backendUrl ?: "")
         result.put("notificationsEnabled", settings.notificationsEnabled)
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun setAuthToken(call: PluginCall) {
+        val token = call.getString("token")?.trim()
+        if (token.isNullOrEmpty()) {
+            call.reject("token required")
+            return
+        }
+        val secureStore = SecureTokenStore(context)
+        secureStore.saveToken(token)
+        val result = JSObject()
+        result.put("saved", true)
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun getAuthToken(call: PluginCall) {
+        val secureStore = SecureTokenStore(context)
+        val result = JSObject()
+        result.put("hasToken", secureStore.hasToken())
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun clearAuthToken(call: PluginCall) {
+        val secureStore = SecureTokenStore(context)
+        secureStore.clearToken()
+        val result = JSObject()
+        result.put("cleared", true)
         call.resolve(result)
     }
 

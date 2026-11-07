@@ -7,9 +7,11 @@ import { ScrollToTop } from '@/components/ScrollToTop'
 import { PageSkeleton } from '@/components/ui/States'
 import { AppLayout } from '@/layouts/AppLayout'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { AuthProvider, useAuth } from '@/providers/AuthProvider'
 import { RefreshProvider } from '@/providers/RefreshProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 import { ToastProvider } from '@/providers/ToastProvider'
+import { LoginPage } from '@/pages/LoginPage'
 import { addSmsReviewListener, getSmsLaunchUrl } from '@/services/sms'
 
 const HomePage = lazy(() =>
@@ -95,18 +97,37 @@ function DeepLinkHandler() {
   return null
 }
 
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth()
+  if (isLoading) {
+    return <PageSkeleton />
+  }
+  if (!isAuthenticated) {
+    return <LoginPage />
+  }
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
-          <RefreshProvider>
-            <BrowserRouter>
-              <ScrollToTop />
-              <DeepLinkHandler />
-              <ExpenseDialogProvider>
-                <Routes>
-                  <Route element={<AppLayout />}>
+          <AuthProvider>
+            <RefreshProvider>
+              <BrowserRouter>
+                <ScrollToTop />
+                <DeepLinkHandler />
+                <ExpenseDialogProvider>
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route
+                      element={
+                        <ProtectedRoute>
+                          <AppLayout />
+                        </ProtectedRoute>
+                      }
+                    >
                     <Route
                       path="/"
                       element={
@@ -249,7 +270,8 @@ export default function App() {
               </ExpenseDialogProvider>
             </BrowserRouter>
           </RefreshProvider>
-        </ToastProvider>
+        </AuthProvider>
+      </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>
   )

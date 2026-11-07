@@ -196,10 +196,15 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const targetUrl = `${apiBase()}${path}`
 
     try {
+      const token =
+        typeof localStorage !== 'undefined'
+          ? localStorage.getItem('moneytrack_auth_token')
+          : null
       const headers: Record<string, string> = {
         Accept: 'application/json',
         ...((options.body && !(options.body instanceof FormData)) ? { 'Content-Type': 'application/json' } : {}),
         ...(options.idempotencyKey ? { 'X-Idempotency-Key': options.idempotencyKey, 'Idempotency-Key': options.idempotencyKey } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...((options.headers as Record<string, string>) ?? {}),
       }
 
@@ -287,6 +292,15 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         window.dispatchEvent(
           new CustomEvent('moneytrack:backend-waking', { detail: { waking: false, failed: true } })
         )
+      }
+      if (response.status === 401) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('moneytrack_auth_token')
+          localStorage.removeItem('moneytrack_auth_user')
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('moneytrack:unauthorized'))
+        }
       }
       let payload: unknown = null
       try {

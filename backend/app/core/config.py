@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -59,9 +60,10 @@ class Settings(BaseSettings):
     keep_alive_url: str | None = None
 
     # Authentication and security configuration
-    secret_key: str = "moneytrack-insecure-default-change-in-production-secret-key-32chars"
+    secret_key: str = ""
     access_token_expire_minutes: int = 60 * 24 * 30  # 30 days
     auth_required: bool = True
+    allow_registration: bool = False
 
     # SQL performance profiling (development-only, disabled by default in production)
     sql_profiling_enabled: bool = False
@@ -72,6 +74,35 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        is_prod = self.environment.lower() in ("production", "prod") or not self.is_sqlite
+        known_placeholders = {
+            "moneytrack-insecure-default-change-in-production-secret-key-32chars",
+            "changeme",
+            "secret",
+            "secret-key",
+            "your-secret-key-here",
+            "replace-with-a-secure-secret-key",
+            "development",
+            "password",
+            "test-secret",
+        }
+        stripped_key = (self.secret_key or "").strip()
+
+        if is_prod:
+            if not stripped_key or len(stripped_key) < 32 or stripped_key.lower() in known_placeholders:
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION ERROR: A strong, cryptographically secure SECRET_KEY "
+                    "(minimum 32 characters) must be configured in production environments. "
+                    "Set the SECRET_KEY environment variable in your production host settings."
+                )
+        else:
+            # Local development or testing fallback
+            if not stripped_key or stripped_key.lower() in known_placeholders:
+                self.secret_key = "moneytrack-dev-insecure-local-only-key-32characters-minimum"
+        return self
 
     @property
     def sqlalchemy_database_url(self) -> str:

@@ -53,6 +53,8 @@ interface SmsPluginWeb {
   }): Promise<void>
   syncNow(): Promise<void>
   getLaunchUrl(): Promise<{ url: string | null }>
+  setAuthToken?(options: { token: string }): Promise<void>
+  clearAuthToken?(): Promise<void>
 }
 
 const SmsPlugin = registerPlugin<SmsPluginWeb>('SmsPlugin', {
@@ -139,6 +141,8 @@ const SmsPlugin = registerPlugin<SmsPluginWeb>('SmsPlugin', {
         async getLaunchUrl(): Promise<{ url: string | null }> {
           return { url: null }
         }
+        async setAuthToken(): Promise<void> {}
+        async clearAuthToken(): Promise<void> {}
       }(),
     ),
 })

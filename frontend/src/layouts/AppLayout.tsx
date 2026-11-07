@@ -8,6 +8,7 @@ import {
   Camera,
   Database,
   LayoutDashboard,
+  LogOut,
   MessageSquareText,
   Moon,
   MoreHorizontal,
@@ -32,6 +33,7 @@ import { useExpenseDialog } from '@/components/ExpenseDialogProvider'
 import { Modal } from '@/components/ui/Modal'
 import { BackendWakingBanner, OfflineBanner } from '@/components/ui/States'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useAuth } from '@/providers/AuthProvider'
 import { useDataRefresh } from '@/providers/RefreshProvider'
 import { useTheme } from '@/providers/ThemeProvider'
 import { useToast } from '@/providers/ToastProvider'
@@ -87,6 +89,7 @@ function Brand({ onClick }: { onClick?: () => void }) {
 
 function Sidebar({ unauthorisedSmsCount }: { unauthorisedSmsCount: number }) {
   const { openCreate, openScanReceipt } = useExpenseDialog()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   return (
@@ -132,6 +135,25 @@ function Sidebar({ unauthorisedSmsCount }: { unauthorisedSmsCount: number }) {
           </NavLink>
         ))}
       </nav>
+
+      <div className="privacy-note mb-2">
+        <div className="flex items-center justify-between">
+          <div className="min-w-0 flex-1 pr-2">
+            <div className="truncate text-xs font-semibold text-ink">
+              {user?.full_name || 'Account'}
+            </div>
+            <div className="truncate text-[11px] text-subtle">{user?.email}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => logout()}
+            title="Sign out"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-danger/10 hover:text-danger"
+          >
+            <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
 
       <div className="privacy-note">
         <div className="privacy-note-title">

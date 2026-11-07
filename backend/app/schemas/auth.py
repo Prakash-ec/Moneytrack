@@ -35,3 +35,4 @@ class Token(BaseModel):
 class SetupStatusRead(BaseModel):
     is_configured: bool
     user_count: int
+    allow_registration: bool = False

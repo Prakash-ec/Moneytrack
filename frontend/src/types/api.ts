@@ -573,3 +573,30 @@ export interface WeeklyReportData {
   generated_at?: string
 }
 
+// -------------------------------------------------------------
+// Authentication & User Tenancy
+// -------------------------------------------------------------
+
+export interface User {
+  id: number
+  email: string
+  full_name?: string | null
+  is_active: boolean
+  is_superuser: boolean
+  created_at: string
+}
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+  expires_in_seconds: number
+  user: User
+}
+
+export interface SetupStatus {
+  is_configured: boolean
+  user_count: number
+  allow_registration: boolean
+}
+
+

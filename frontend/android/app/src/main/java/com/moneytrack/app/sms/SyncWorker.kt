@@ -8,6 +8,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.moneytrack.app.security.SecureTokenStore
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -40,8 +41,23 @@ class SyncWorker(context: Context, params: WorkerParameters) :
         val ready = queue.filter { it.status == CandidateStatus.READY_TO_SYNC }
         if (ready.isEmpty()) return Result.success()
 
+        val secureStore = SecureTokenStore(applicationContext)
+        val authToken = secureStore.getToken()
+        if (authToken.isNullOrBlank()) {
+            Log.w(TAG, "Sync paused: missing auth token; transactions preserved in queue")
+            for (record in ready) {
+                store.upsert(
+                    record.copy(
+                        status = CandidateStatus.FAILED,
+                        error = "Authentication required: please sign in to MoneyTrack"
+                    )
+                )
+            }
+            return Result.success()
+        }
+
         // Fetch active expense types dynamically from backend
-        val activeTypes = fetchActiveExpenseTypes(backendUrl)
+        val activeTypes = fetchActiveExpenseTypes(backendUrl, authToken)
         if (activeTypes.isEmpty()) {
             Log.w(TAG, "No active expense types available from backend; will retry.")
             return Result.retry()
@@ -49,13 +65,22 @@ class SyncWorker(context: Context, params: WorkerParameters) :
 
         var allOk = true
         for (record in ready) {
-            val result = syncTransaction(backendUrl, record, activeTypes)
+            val result = syncTransaction(backendUrl, record, activeTypes, authToken)
+            val isAuthError = result.error?.contains("401") == true ||
+                result.error?.contains("Authentication", ignoreCase = true) == true
             val updated = when {
                 result.created || result.replayed -> record.copy(
                     status = CandidateStatus.SYNCED,
                     syncedAtMs = System.currentTimeMillis(),
                     error = null,
                 )
+                isAuthError -> {
+                    allOk = false
+                    record.copy(
+                        status = CandidateStatus.FAILED,
+                        error = "Authentication required: please sign in to MoneyTrack",
+                    )
+                }
                 else -> {
                     allOk = false
                     val nextRetry = (record.retryCount + 1).coerceAtMost(5)
@@ -269,7 +294,7 @@ class SyncWorker(context: Context, params: WorkerParameters) :
         /**
          * Fetches active expense types from the backend API.
          */
-        fun fetchActiveExpenseTypes(backendUrl: String): List<ActiveExpenseType> {
+        fun fetchActiveExpenseTypes(backendUrl: String, authToken: String? = null): List<ActiveExpenseType> {
             val urlStr = buildEndpointUrl(backendUrl, "expense-types?archived=exclude")
             var conn: HttpURLConnection? = null
             return try {
@@ -278,6 +303,9 @@ class SyncWorker(context: Context, params: WorkerParameters) :
                     connectTimeout = 10000
                     readTimeout = 10000
                     setRequestProperty("Accept", "application/json")
+                    if (!authToken.isNullOrBlank()) {
+                        setRequestProperty("Authorization", "Bearer $authToken")
+                    }
                 }
                 if (conn.responseCode in 200 until 300) {
                     val responseBody = conn.inputStream.use { it.readBytes() }.toString(Charsets.UTF_8)
@@ -302,7 +330,8 @@ class SyncWorker(context: Context, params: WorkerParameters) :
         fun syncTransaction(
             backendUrl: String,
             record: TransactionRecord,
-            activeTypes: List<ActiveExpenseType>
+            activeTypes: List<ActiveExpenseType>,
+            authToken: String? = null
         ): SyncResult {
             val parsed = record.parsed
             if (parsed.amountPaise == null) {
@@ -310,13 +339,13 @@ class SyncWorker(context: Context, params: WorkerParameters) :
             }
 
             // Attempt enhanced SMS ingest endpoint first (/api/sms/ingest)
-            val ingestResult = ingestSms(backendUrl, record)
+            val ingestResult = ingestSms(backendUrl, record, authToken)
             if (ingestResult != null) {
                 return ingestResult
             }
 
             // Fallback to traditional /api/expenses endpoint
-            return createExpense(backendUrl, record, activeTypes)
+            return createExpense(backendUrl, record, activeTypes, authToken)
         }
 
         /**
@@ -324,7 +353,8 @@ class SyncWorker(context: Context, params: WorkerParameters) :
          */
         fun ingestSms(
             backendUrl: String,
-            record: TransactionRecord
+            record: TransactionRecord,
+            authToken: String? = null
         ): SyncResult? {
             val parsed = record.parsed
             val amount = parsed.amountPaise ?: return null
@@ -342,6 +372,9 @@ class SyncWorker(context: Context, params: WorkerParameters) :
                     addRequestProperty("Content-Type", "application/json")
                     addRequestProperty("Accept", "application/json")
                     addRequestProperty("Idempotency-Key", record.id)
+                    if (!authToken.isNullOrBlank()) {
+                        addRequestProperty("Authorization", "Bearer $authToken")
+                    }
                 }
 
                 val obj = JSONObject().apply {
@@ -364,6 +397,9 @@ class SyncWorker(context: Context, params: WorkerParameters) :
                 if (code == 404) {
                     // Endpoint not found on legacy backend; return null to trigger fallback
                     return null
+                }
+                if (code == 401) {
+                    return SyncResult(false, false, null, "HTTP 401: Authentication required or token expired")
                 }
 
                 if (code in 200 until 300) {
@@ -398,7 +434,8 @@ class SyncWorker(context: Context, params: WorkerParameters) :
         fun createExpense(
             backendUrl: String,
             record: TransactionRecord,
-            activeTypes: List<ActiveExpenseType>
+            activeTypes: List<ActiveExpenseType>,
+            authToken: String? = null
         ): SyncResult {
             val parsed = record.parsed
             val typeId = resolveExpenseTypeId(parsed.categorySuggestion, parsed.merchant, activeTypes)
@@ -424,6 +461,9 @@ class SyncWorker(context: Context, params: WorkerParameters) :
                     addRequestProperty("Content-Type", "application/json")
                     addRequestProperty("Accept", "application/json")
                     addRequestProperty("Idempotency-Key", idempotencyKey)
+                    if (!authToken.isNullOrBlank()) {
+                        addRequestProperty("Authorization", "Bearer $authToken")
+                    }
                 }
                 val body = buildJsonExpense(typeId, parsed.amountPaise, expenseDate, note, merchant)
                 connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
@@ -431,6 +471,10 @@ class SyncWorker(context: Context, params: WorkerParameters) :
                 val replayed = connection.headerFields["X-Idempotent-Replay"]?.any {
                     it.equals("true", ignoreCase = true)
                 } == true
+
+                if (responseCode == 401) {
+                    return SyncResult(false, false, null, "HTTP 401: Authentication required or token expired")
+                }
 
                 if (responseCode in 200 until 300) {
                     val responseBody = connection.inputStream.use { it.readBytes() }.toString(Charsets.UTF_8)

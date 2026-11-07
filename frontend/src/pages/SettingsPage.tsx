@@ -17,6 +17,8 @@ import {
   Sun,
   Trash2,
   Upload,
+  User as UserIcon,
+  LogOut,
   Wifi,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -30,6 +32,7 @@ import { Input } from '@/components/ui/FormControls'
 import { useApiQuery } from '@/hooks/useApiQuery'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useAuth } from '@/providers/AuthProvider'
 import { useDataRefresh } from '@/providers/RefreshProvider'
 import { useTheme } from '@/providers/ThemeProvider'
 import { useToast } from '@/providers/ToastProvider'
@@ -42,6 +45,7 @@ export function SettingsPage() {
   const { theme, setTheme } = useTheme()
   const { showToast } = useToast()
   const { invalidate } = useDataRefresh()
+  const { user, logout } = useAuth()
   const online = useOnlineStatus()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [exporting, setExporting] = useState<'csv' | 'json' | null>(null)
@@ -370,6 +374,41 @@ export function SettingsPage() {
                 )}
               </button>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Account & Profile */}
+      <section className="settings-section">
+        <div className="settings-heading">
+          <h2>Account</h2>
+          <p>Authenticated user and session control.</p>
+        </div>
+        <div className="card overflow-hidden">
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-icon">
+                <UserIcon size={18} />
+              </span>
+              <div className="setting-text">
+                <h3>{user?.full_name || 'Personal Account'}</h3>
+                <p>{user?.email || 'Authenticated user'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {user?.is_superuser && (
+                <Badge tone="primary">Admin</Badge>
+              )}
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => logout()}
+                className="gap-1.5"
+              >
+                <LogOut className="h-3.5 w-3.5" aria-hidden />
+                Sign out
+              </Button>
+            </div>
           </div>
         </div>
       </section>

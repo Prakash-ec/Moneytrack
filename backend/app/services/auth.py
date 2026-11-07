@@ -1,5 +1,6 @@
-from datetime import timedelta
-from sqlalchemy import or_, update
+from typing import Any
+
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -17,23 +18,74 @@ from app.models.security_alert import SecurityAlert
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.schemas.auth import SetupStatusRead, UserCreate, UserLogin
-from app.services.errors import ConflictError, NotFoundError
+from app.services.errors import ConflictError
 
 settings = get_settings()
+
+
+SYSTEM_EXPENSE_TYPE_KEYS = {
+    "food_&_dining",
+    "groceries",
+    "transportation",
+    "fuel",
+    "utilities",
+    "mobile_recharge",
+    "shopping",
+    "medical",
+    "entertainment",
+    "rent_&_maintenance",
+    "education",
+    "other",
+}
+
+SYSTEM_INCOME_TYPE_KEYS = {
+    "other_income",
+    "salary",
+    "freelance",
+    "investment",
+    "investments",
+    "business",
+    "rental",
+    "gift",
+    "refunds",
+    "other",
+}
 
 
 class AuthenticationError(Exception):
     """Raised when authentication credentials are invalid or missing."""
 
 
-def claim_legacy_records_for_user(db: Session, user_id: int) -> None:
-    """Safely associates unowned legacy financial records with the primary user."""
-    models_to_claim = [
+def claim_legacy_records_for_user(db: Session, user_id: int, commit: bool = True) -> None:
+    """Safely associates unowned legacy financial records with the primary user.
+    Preserves system default expense and income categories with user_id=None
+    so they remain accessible as templates across all users.
+    """
+    # 1. ExpenseType: only claim custom types, leave default system types unowned (shared)
+    db.execute(
+        update(ExpenseType)
+        .where(
+            ExpenseType.user_id.is_(None),
+            ExpenseType.name_key.notin_(SYSTEM_EXPENSE_TYPE_KEYS),
+        )
+        .values(user_id=user_id)
+    )
+
+    # 2. IncomeType: only claim custom types, leave default system types unowned (shared)
+    db.execute(
+        update(IncomeType)
+        .where(
+            IncomeType.user_id.is_(None),
+            IncomeType.name_key.notin_(SYSTEM_INCOME_TYPE_KEYS),
+        )
+        .values(user_id=user_id)
+    )
+
+    # 3. User-owned financial and ledger models
+    standard_models: list[Any] = [
         Expense,
-        ExpenseType,
         BankAccount,
         Income,
-        IncomeType,
         AccountTransfer,
         Budget,
         CategoryBudget,
@@ -42,22 +94,32 @@ def claim_legacy_records_for_user(db: Session, user_id: int) -> None:
         NotificationLog,
         UserPreference,
     ]
-    for model in models_to_claim:
+    for model in standard_models:
         db.execute(
             update(model).where(model.user_id.is_(None)).values(user_id=user_id)
         )
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def register_user(db: Session, data: UserCreate) -> tuple[User, str]:
-    """Registers a new user, hashes password securely, and handles owner setup."""
+    """Registers a new user, hashes password securely, and handles owner setup.
+    Registration policy:
+    - First user can always register (instance bootstrap).
+    - Subsequent registrations require settings.allow_registration == True.
+    - User creation and legacy data adoption execute atomically in a single transaction.
+    """
+    user_count = db.query(User).count()
+    is_first_user = user_count == 0
+
+    current_settings = get_settings()
+    if not is_first_user and not current_settings.allow_registration:
+        raise ConflictError("Registration is disabled on this instance.")
+
     email = data.email.strip().lower()
     existing = db.query(User).filter(User.email == email).first()
     if existing:
         raise ConflictError("A user with this email already exists.")
-
-    user_count = db.query(User).count()
-    is_first_user = user_count == 0
 
     user = User(
         email=email,
@@ -67,12 +129,14 @@ def register_user(db: Session, data: UserCreate) -> tuple[User, str]:
         is_superuser=is_first_user,
     )
     db.add(user)
+    db.flush()  # Generate user.id within current transaction
+
+    # If this is the initial instance owner, claim any unowned legacy data atomically
+    if is_first_user:
+        claim_legacy_records_for_user(db, user.id, commit=False)
+
     db.commit()
     db.refresh(user)
-
-    # If this is the initial instance owner, claim any unowned legacy data
-    if is_first_user:
-        claim_legacy_records_for_user(db, user.id)
 
     token = create_access_token(subject=user.id)
     return user, token
@@ -92,9 +156,12 @@ def authenticate_user(db: Session, data: UserLogin) -> tuple[User, str]:
 
 
 def get_setup_status(db: Session) -> SetupStatusRead:
-    """Checks whether the application has at least one registered user."""
+    """Checks whether the application has at least one registered user and whether registration is allowed."""
     user_count = db.query(User).count()
+    current_settings = get_settings()
+    allow_reg = True if user_count == 0 else current_settings.allow_registration
     return SetupStatusRead(
         is_configured=user_count > 0,
         user_count=user_count,
+        allow_registration=allow_reg,
     )
