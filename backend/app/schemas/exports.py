@@ -13,4 +13,5 @@ class RestoreSummaryRead(BaseModel):
     restored_incomes: int = 0
     restored_transfers: int = 0
     restored_budgets: int = 0
+    restored_category_budgets: int = 0
     message: str

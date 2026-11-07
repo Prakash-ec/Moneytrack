@@ -9,11 +9,15 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: ENVIRONMENT
+        value: "production"
       - key: DATABASE_URL
         sync: false
       - key: SECRET_KEY
         sync: false
       - key: ALLOW_REGISTRATION
+        value: "false"
+      - key: RUN_STARTUP_MIGRATIONS
         value: "false"
       - key: CORS_ORIGINS
         value: "https://moneytrack-frontend.onrender.com,https://moneytrack-frontend-g5is.onrender.com,https://moneytrack-frontend-bujt.onrender.com,http://localhost:5173,https://localhost,capacitor://localhost"

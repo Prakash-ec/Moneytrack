@@ -16,7 +16,7 @@ import { api, ApiError } from '@/services/api'
 import type { WeeklyReportData } from '@/types/api'
 import { cn } from '@/utils/cn'
 
-export default function WeeklyReportPage() {
+export function WeeklyReportPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [report, setReport] = useState<WeeklyReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,11 +77,13 @@ export default function WeeklyReportPage() {
   }
 
   return (
-    <div className="space-y-6 pb-20">
-      <PageHeader
-        title="Weekly Spending Report"
-        description="Comprehensive Monday-to-Sunday financial digest with cashflow, savings rate, and category breakdowns."
-      />
+    <div className={embedded ? 'space-y-6' : 'space-y-6 pb-20'}>
+      {!embedded && (
+        <PageHeader
+          title="Weekly Spending Report"
+          description="Comprehensive Monday-to-Sunday financial digest with cashflow, savings rate, and category breakdowns."
+        />
+      )}
 
       {/* Week Selector Bar */}
       <div className="flex items-center justify-between rounded-2xl border border-line/60 bg-surface-card p-3 shadow-soft">
@@ -322,3 +324,5 @@ export default function WeeklyReportPage() {
     </div>
   )
 }
+
+export default WeeklyReportPage

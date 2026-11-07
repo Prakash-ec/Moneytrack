@@ -6,6 +6,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
+import com.moneytrack.app.BuildConfig
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -25,11 +26,26 @@ private const val PREF_IV = "token_iv"
  * Secure, Keystore-backed storage for authentication tokens (JWT).
  * Uses AES-GCM with hardware-backed keys provided by AndroidKeyStore.
  * Never leaks token contents into system logs or exception traces.
+ * In release mode, Keystore failures fail securely; plaintext fallback is strictly restricted to DEBUG / test runners.
  */
 class SecureTokenStore(private val context: Context) {
 
     private val prefs: SharedPreferences by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    /**
+     * Determines whether test fallback is permitted.
+     * Permitted ONLY when BuildConfig.DEBUG is true or in headless JVM unit test runner.
+     * In release builds (BuildConfig.DEBUG == false), test fallback is STRICTLY disabled.
+     */
+    private fun isTestFallbackAllowed(): Boolean {
+        return try {
+            BuildConfig.DEBUG
+        } catch (_: Throwable) {
+            // In headless JVM unit test runner where BuildConfig might not be loaded
+            true
+        }
     }
 
     @Synchronized
@@ -54,9 +70,15 @@ class SecureTokenStore(private val context: Context) {
                 .putString(PREF_IV, ivBase64)
                 .apply()
         } catch (e: Exception) {
-            // Fallback for headless JVM unit test runner where AndroidKeyStore provider is absent
-            val fallback = Base64.encodeToString(token.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-            prefs.edit().putString(PREF_ENCRYPTED_TOKEN, fallback).remove(PREF_IV).apply()
+            Log.e(TAG, "Keystore encryption error: ${e.javaClass.simpleName}")
+            if (isTestFallbackAllowed()) {
+                // Test-only fallback for headless JVM unit test runner where AndroidKeyStore provider is absent
+                val fallback = Base64.encodeToString(token.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                prefs.edit().putString(PREF_ENCRYPTED_TOKEN, fallback).remove(PREF_IV).apply()
+            } else {
+                // Fail securely in release mode: never persist plaintext tokens
+                clearToken()
+            }
         }
     }
 
@@ -66,7 +88,13 @@ class SecureTokenStore(private val context: Context) {
         val ivBase64 = prefs.getString(PREF_IV, null)
 
         if (ivBase64 == null) {
-            // Unencrypted / test fallback decode
+            if (!isTestFallbackAllowed()) {
+                // In release mode, unencrypted tokens are strictly rejected and purged
+                Log.w(TAG, "Rejecting unencrypted token in release mode")
+                clearToken()
+                return null
+            }
+            // Unencrypted / test fallback decode for headless unit test runner
             return try {
                 String(Base64.decode(encBase64, Base64.NO_WRAP), Charsets.UTF_8)
             } catch (_: Exception) {

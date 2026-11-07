@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utc_now
@@ -14,12 +14,30 @@ if TYPE_CHECKING:
 class IncomeType(Base):
     __tablename__ = "income_types"
 
+    __table_args__ = (
+        Index(
+            "ix_income_types_system_name_key",
+            "name_key",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+            sqlite_where=text("user_id IS NULL"),
+        ),
+        Index(
+            "ix_income_types_user_name_key",
+            "user_id",
+            "name_key",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+            sqlite_where=text("user_id IS NOT NULL"),
+        ),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(80), nullable=False)
-    name_key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    name_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     icon: Mapped[str] = mapped_column(String(40), nullable=False, default="wallet")

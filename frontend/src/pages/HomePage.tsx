@@ -1,23 +1,16 @@
 import {
-  ArrowDownLeft,
   ArrowRight,
   Building2,
-  Calendar,
   Plus,
   Receipt,
-  SlidersHorizontal,
-  TrendingUp,
-  WalletCards,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { ComparisonBadge } from '@/components/ComparisonBadge'
 import { CashflowHeroCard } from '@/components/CashflowHeroCard'
 import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
 import { QuickChipsModal } from '@/components/QuickChipsModal'
-import { StatCard } from '@/components/StatCard'
 import { TransactionRow } from '@/components/TransactionRow'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -134,7 +127,7 @@ export function HomePage() {
 
       {/* Financial Overview & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5 items-stretch">
-        <div className="lg:col-span-5 flex flex-col justify-center">
+        <div className="lg:col-span-6 flex flex-col justify-center">
           <CashflowHeroCard
             totalPaise={summary?.total_paise ?? 0}
             transactionCount={summary?.transaction_count ?? 0}
@@ -146,191 +139,130 @@ export function HomePage() {
             discrepancyPaise={cashflow?.reconciliation_difference_paise ?? 0}
             incomeTotalPaise={cashflow?.total_income_paise ?? 0}
             onAddExpense={() => openCreate()}
-            onAddIncome={() => navigate('/income')}
-            onTransfer={() => navigate('/transfers')}
+            onAddIncome={() => navigate('/transactions?tab=income')}
+            onTransfer={() => navigate('/transactions?tab=transfers')}
             onScanReceipt={() => openScanReceipt()}
             onManageAccounts={() => navigate('/bank-accounts')}
           />
         </div>
 
-        <div className="lg:col-span-7 flex flex-col justify-between">
-          {/* Quick Expense Logging Chips */}
-          <div className="card p-5 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-text">
-                  Quick record
-                </span>
+        <div className="lg:col-span-6 flex flex-col justify-between">
+          {/* Bank Accounts Mini Strip */}
+          {cashflow?.bank_accounts && cashflow.bank_accounts.length > 0 ? (
+            <div className="card p-5 h-full flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
+                    <span className="text-xs font-semibold text-text">
+                      Linked accounts ({cashflow.bank_accounts.length})
+                    </span>
+                  </div>
+                  <Link
+                    to="/bank-accounts"
+                    className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
+                  >
+                    <span>Manage</span>
+                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {cashflow.bank_accounts.slice(0, 4).map((acc) => (
+                    <div
+                      key={acc.id}
+                      onClick={() => navigate('/bank-accounts')}
+                      className="flex items-center justify-between p-3 rounded-xl bg-surface-raised border border-border hover:border-border-strong transition-colors cursor-pointer"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="font-medium text-xs text-text truncate">{acc.name}</div>
+                        <div className="text-[10px] text-muted flex items-center gap-1">
+                          <span>{acc.bank_name}</span>
+                          {acc.account_number_mask && (
+                            <span className="font-mono tabular-nums">· ••{acc.account_number_mask}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-mono tabular-nums text-xs font-semibold text-text">
+                          {formatINR(acc.current_balance_paise)}
+                        </div>
+                        <div className="text-[10px] text-muted capitalize">
+                          {acc.account_type.replace('_', ' ')}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-muted hidden sm:inline">Frequent shortcuts</span>
+
+              {/* Quick Record Chips Mini-Bar */}
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  <span className="text-[10px] uppercase font-bold text-muted mr-1">Quick:</span>
+                  {quickChips.slice(0, 3).map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() =>
+                        openCreate({
+                          amount: chip.amount,
+                          merchant: chip.merchant,
+                          note: chip.note,
+                          payment_method: chip.payment_method ? (chip.payment_method as any) : 'UPI',
+                        })
+                      }
+                      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-surface-raised hover:bg-surface border border-border text-text transition-colors shrink-0"
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
                 <button
                   type="button"
                   onClick={() => setIsEditChipsOpen(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-raised hover:bg-surface text-[11px] font-medium text-text border border-border hover:border-border-strong transition-colors"
-                  title="Customize shortcuts and prices"
+                  className="text-[11px] text-muted hover:text-text font-medium ml-2 shrink-0"
                 >
-                  <SlidersHorizontal className="h-3 w-3 text-muted" aria-hidden="true" />
-                  <span>Edit</span>
+                  Edit
                 </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {quickChips.map((chip) => (
-                <button
-                  key={chip.id}
-                  type="button"
-                  onClick={() =>
-                    openCreate({
-                      amount: chip.amount,
-                      merchant: chip.merchant,
-                      note: chip.note,
-                      payment_method: chip.payment_method ? (chip.payment_method as any) : 'UPI',
-                    })
-                  }
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-raised hover:bg-surface border border-border hover:border-border-strong text-text transition-colors shrink-0"
-                >
-                  <span>{chip.label}</span>
-                </button>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => setIsEditChipsOpen(true)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-raised/50 hover:bg-surface-raised border border-dashed border-border hover:border-border-strong text-muted hover:text-text transition-colors shrink-0"
-                title="Add or edit quick shortcuts"
-              >
-                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Customize</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Bank Accounts Mini Strip */}
-          {cashflow?.bank_accounts && cashflow.bank_accounts.length > 0 ? (
-            <div className="card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
-                  <span className="text-xs font-semibold text-text">
-                    Linked accounts ({cashflow.bank_accounts.length})
-                  </span>
-                </div>
-                <Link
-                  to="/bank-accounts"
-                  className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
-                >
-                  <span>Manage</span>
-                  <ArrowRight className="h-3 w-3" aria-hidden="true" />
-                </Link>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {cashflow.bank_accounts.slice(0, 4).map((acc) => (
-                  <div
-                    key={acc.id}
-                    onClick={() => navigate('/bank-accounts')}
-                    className="flex items-center justify-between p-3 rounded-lg bg-surface-raised border border-border hover:border-border-strong transition-colors cursor-pointer"
-                  >
-                    <div className="min-w-0 pr-2">
-                      <div className="font-medium text-xs text-text truncate">{acc.name}</div>
-                      <div className="text-[10px] text-muted flex items-center gap-1">
-                        <span>{acc.bank_name}</span>
-                        {acc.account_number_mask && (
-                          <span className="font-mono tabular-nums">· ••{acc.account_number_mask}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-mono tabular-nums text-xs font-semibold text-text">
-                        {formatINR(acc.current_balance_paise)}
-                      </div>
-                      <div className="text-[10px] text-muted capitalize">
-                        {acc.account_type.replace('_', ' ')}
-                      </div>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           ) : (
             /* Spending Velocity & Burn Meter */
-            <div className="card p-5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-text">
-                  Average daily spend
-                </span>
-                <Badge tone="neutral">Pace</Badge>
+            <div className="card p-5 h-full flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-text">
+                    Average daily spend
+                  </span>
+                  <Badge tone="neutral">Pace</Badge>
+                </div>
+                <div className="flex items-baseline justify-between mt-2">
+                  <div>
+                    <span className="text-2xl font-semibold text-text font-mono tabular-nums">
+                      {formatINR(summary?.average_paise ?? 0)}
+                    </span>
+                    <span className="text-xs text-muted ml-1.5">/ active day</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[11px] text-muted block">Period average</span>
+                    <span className="text-xs font-medium text-text font-mono tabular-nums">
+                      {summary && summary.transaction_count > 0
+                        ? formatINR(Math.round(summary.total_paise / summary.transaction_count))
+                        : '₹0'}
+                      <span className="text-[10px] text-muted ml-1">/ transaction</span>
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-baseline justify-between mt-1">
-                <div>
-                  <span className="text-2xl font-semibold text-text font-mono tabular-nums">
-                    {formatINR(summary?.average_paise ?? 0)}
-                  </span>
-                  <span className="text-xs text-muted ml-1.5">/ active day</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[11px] text-muted block">Period average</span>
-                  <span className="text-xs font-medium text-text font-mono tabular-nums">
-                    {summary && summary.transaction_count > 0
-                      ? formatINR(Math.round(summary.total_paise / summary.transaction_count))
-                      : '₹0'}
-                    <span className="text-[10px] text-muted ml-1">/ transaction</span>
-                  </span>
-                </div>
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/bank-accounts')}>
+                  <span>+ Link bank account</span>
+                </Button>
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Financial Metrics Grid - Consolidated & Free of Redundancy */}
-      <section className="stat-grid mb-5" aria-label="Key cashflow and spending metrics">
-        <StatCard
-          label="Total Income"
-          value={formatINR(cashflow?.total_income_paise ?? 0)}
-          icon={ArrowDownLeft}
-          detail="Recorded inflows this period"
-        />
-        <StatCard
-          label="Total Expenses"
-          value={formatINR(summary?.total_paise ?? 0)}
-          icon={WalletCards}
-          detail={
-            summary?.comparison ? (
-              <span className="flex items-center gap-1.5">
-                <ComparisonBadge
-                  direction={summary.comparison.direction}
-                  changePercent={summary.comparison.change_percent}
-                  changePaise={summary.comparison.change_paise}
-                />
-                <span>from last period</span>
-              </span>
-            ) : (
-              `${summary?.transaction_count ?? 0} transactions`
-            )
-          }
-        />
-        <StatCard
-          label="Net Cashflow"
-          value={formatINR(cashflow?.net_cashflow_paise ?? 0)}
-          icon={TrendingUp}
-          detail={
-            cashflow?.savings_rate_percent != null
-              ? `Savings rate: ${cashflow.savings_rate_percent.toFixed(1)}%`
-              : (cashflow?.net_cashflow_paise ?? 0) >= 0 ? 'Surplus' : 'Deficit'
-          }
-        />
-        <StatCard
-          label="Daily Average"
-          value={formatINR(summary?.average_paise ?? 0)}
-          icon={Calendar}
-          detail={
-            summary?.highest_expense
-              ? `Peak: ${formatINR(summary.highest_expense.amount_paise)} (${summary.highest_expense.expense_type?.name ?? 'Expense'})`
-              : 'Across active days'
-          }
-        />
-      </section>
 
       {hasExpenses ? (
         <>
@@ -363,7 +295,7 @@ export function HomePage() {
                   <p>Categorized outflow</p>
                 </div>
                 <Link
-                  to={`/breakdown?${period.periodSearch}`}
+                  to={`/analytics?view=breakdown&${period.periodSearch}`}
                   className="button button-ghost button-sm text-primary flex items-center gap-1"
                 >
                   <span>View breakdown</span>
@@ -422,7 +354,7 @@ export function HomePage() {
                 <p>Latest recorded activity</p>
               </div>
               <Link
-                to={`/expenses?${period.periodSearch}`}
+                to={`/transactions?${period.periodSearch}`}
                 className="button button-ghost button-sm text-primary flex items-center gap-1"
               >
                 <span>View all</span>

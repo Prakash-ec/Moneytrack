@@ -13,109 +13,110 @@
 :root {
   color-scheme: light;
   --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Inter Variable', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-display: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'Inter Variable', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Verified Figma UI Kit Tokens (Emerald Fintech System) */
-  --primary: #16845b;
-  --primary-hover: #0f6b49;
-  --primary-soft: #eaf5f0;
+  /* Official Mercury Indigo Tokens (Light Mode) */
+  --primary: #5266eb;
+  --primary-hover: #4338ca;
+  --primary-soft: #eef1fe;
   --primary-contrast: #ffffff;
-  --primary-gradient: #16845b;
-  --accent-blue: #406bb7;
-  --accent-navy: #17231d;
-  --accent-rose: #c84646;
-  --accent-amber: #a86619;
+  --primary-gradient: #5266eb;
+  --accent-blue: #3b82f6;
+  --accent-navy: #0f172a;
+  --accent-rose: #e11d48;
+  --accent-amber: #d97706;
 
-  --bg: #f7f9f8;
-  --sidebar: #fbfcfb;
+  --bg: #f8fafc;
+  --sidebar: #ffffff;
   --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --text: #17231d;
-  --muted: #718078;
-  --muted-2: #98a39d;
-  --border: #e5ebe7;
-  --border-strong: #d5dfd9;
+  --surface-raised: #f1f5f9;
+  --text: #0f172a;
+  --muted: #475569;
+  --muted-2: #64748b;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
 
-  /* Semantic Financial Colors */
-  --positive: #16845b;
-  --positive-hover: #0f6b49;
-  --positive-soft: #eaf5f0;
-  --positive-border: #b8dfcd;
+  /* Semantic Financial Colors (Light Mode) */
+  --positive: #059669;
+  --positive-hover: #047857;
+  --positive-soft: #ecfdf5;
+  --positive-border: #a7f3d0;
 
-  --danger: #c84646;
-  --danger-hover: #ad3939;
-  --danger-soft: #fdeaea;
-  --danger-border: #f8c8c8;
+  --danger: #e11d48;
+  --danger-hover: #be123c;
+  --danger-soft: #fff1f2;
+  --danger-border: #fecdd3;
   --danger-contrast: #ffffff;
 
-  --warning: #a86619;
-  --warning-soft: #fff3dd;
-  --warning-border: #f5dba6;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --warning-border: #fde68a;
 
-  /* Restrained, Authentic Figma Elevation */
-  --shadow: 0 1px 2px #14251c08, 0 4px 16px #14251c09;
-  --shadow-lg: 0 4px 14px -2px #14251c14, 0 2px 6px -2px #14251c0a;
+  /* Restrained, Clean Light Elevation (Soft tactile shadows) */
+  --shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
   --glass-blur: none;
 
   /* Tailwind CSS compatibility variables */
-  --canvas: 247 249 248;
-  --line: 229 235 231;
-  --ink: 23 35 29;
-  --subtle: 113 128 120;
-  --navy: 23 35 29;
-  --gold: 168 102 25;
+  --canvas: 248 250 252;
+  --line: 226 232 240;
+  --ink: 15 23 42;
+  --subtle: 100 116 139;
+  --navy: 15 23 42;
+  --gold: 217 119 6;
 }
 
 .dark {
   color-scheme: dark;
-  /* Figma Dark Theme: Deep Pine & Obsidian */
-  --primary: #36b889;
-  --primary-hover: #4bc99a;
-  --primary-soft: #173d30;
+  /* Official Mercury Indigo & Obsidian Tokens (Dark Mode) - No Swamp Green, No Pure #000000 Black */
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --primary-soft: rgba(99, 102, 241, 0.14);
   --primary-contrast: #ffffff;
-  --primary-gradient: #36b889;
-  --accent-blue: #406bb7;
-  --accent-navy: #111814;
-  --accent-rose: #ef4444;
+  --primary-gradient: #6366f1;
+  --accent-blue: #38bdf8;
+  --accent-navy: #0b0f19;
+  --accent-rose: #f43f5e;
   --accent-amber: #f59e0b;
 
-  --bg: #111814;
-  --sidebar: #141c17;
-  --surface: #18211c;
-  --surface-raised: #1d2822;
-  --text: #edf5f0;
-  --muted: #9aaba1;
-  --muted-2: #728178;
-  --border: #2a382f;
-  --border-strong: #3a4b41;
+  --bg: #0b0f19;
+  --sidebar: #0f1422;
+  --surface: #161b26;
+  --surface-raised: #1c2333;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --muted-2: #64748b;
+  --border: #232b3b;
+  --border-strong: #333d52;
 
   /* Semantic Financial Colors in Dark Mode */
-  --positive: #36b889;
-  --positive-hover: #4bc99a;
-  --positive-soft: rgba(54, 184, 137, 0.16);
-  --positive-border: rgba(54, 184, 137, 0.32);
+  --positive: #10b981;
+  --positive-hover: #059669;
+  --positive-soft: rgba(16, 185, 129, 0.14);
+  --positive-border: rgba(16, 185, 129, 0.28);
 
-  --danger: #ef4444;
-  --danger-hover: #dc2626;
-  --danger-soft: rgba(239, 68, 68, 0.16);
-  --danger-border: rgba(239, 68, 68, 0.32);
+  --danger: #f43f5e;
+  --danger-hover: #e11d48;
+  --danger-soft: rgba(244, 63, 94, 0.14);
+  --danger-border: rgba(244, 63, 94, 0.28);
   --danger-contrast: #ffffff;
 
   --warning: #f59e0b;
-  --warning-soft: rgba(245, 158, 11, 0.16);
-  --warning-border: rgba(245, 158, 11, 0.32);
+  --warning-soft: rgba(245, 158, 11, 0.14);
+  --warning-border: rgba(245, 158, 11, 0.28);
 
-  --shadow: 0 1px 2px #0000002e, 0 6px 20px #0000001f;
-  --shadow-lg: 0 8px 24px -4px #00000050, 0 4px 8px -2px #00000030;
+  /* Dark Elevation: Crisp step contrast + hairline separation, no glowing washes */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 6px 18px rgba(0, 0, 0, 0.45);
   --glass-blur: none;
 
   /* Tailwind CSS compatibility variables */
-  --canvas: 17 24 20;
-  --line: 42 56 47;
-  --ink: 237 245 240;
-  --subtle: 154 171 161;
-  --navy: 237 245 240;
+  --canvas: 11 15 25;
+  --line: 35 43 59;
+  --ink: 248 250 252;
+  --subtle: 148 163 184;
+  --navy: 248 250 252;
   --gold: 245 158 11;
 }
 
@@ -137,6 +138,11 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
   }
 
   ::selection {
@@ -243,9 +249,10 @@
 }
 
 .brand-title {
+  font-family: var(--font-display);
   font-size: 15px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   color: var(--text);
   line-height: 1.1;
 }
@@ -412,9 +419,10 @@
 }
 
 .page-header h1 {
+  font-family: var(--font-display);
   font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.025em;
   color: var(--text);
   line-height: 1.25;
 }
@@ -559,7 +567,7 @@
 }
 
 .dark .badge-positive, .dark .badge-success {
-  color: #34d399;
+  color: #10b981;
   background: rgba(16, 185, 129, 0.14);
   border: 1px solid rgba(16, 185, 129, 0.28);
 }
@@ -571,9 +579,9 @@
 }
 
 .dark .badge-primary {
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.16);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.16);
+  border: 1px solid rgba(99, 102, 241, 0.3);
 }
 
 .badge-warning {
@@ -583,8 +591,8 @@
 }
 
 .dark .badge-warning {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
   border: 1px solid rgba(245, 158, 11, 0.28);
 }
 
@@ -595,9 +603,9 @@
 }
 
 .dark .badge-danger {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.28);
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.14);
+  border: 1px solid rgba(244, 63, 94, 0.28);
 }
 
 /* Period Picker */
@@ -752,14 +760,14 @@
 }
 
 .stat-value {
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
   margin: 8px 0 4px;
   font-size: clamp(18px, 4.5vw, 22px);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
   display: block;
   color: var(--text);
-  font-family: var(--font-mono), monospace;
+  font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -767,15 +775,23 @@
 }
 
 /* Dedicated Tabular Numeral Utilities */
+.tabular {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.01em;
+}
+
 .tabular-nums {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .numeral {
   font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.01em;
 }
 
 .stat-detail {
@@ -946,10 +962,12 @@
 .transaction-amount {
   text-align: right;
   font-size: 14.5px;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--text);
-  font-family: var(--font-display);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.01em;
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -966,7 +984,7 @@
 }
 
 .dark .table-summary {
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--surface-raised);
 }
 
 .table-summary strong {
@@ -988,9 +1006,9 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  background: #0b140f8f;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background: rgba(11, 15, 25, 0.72);
   display: grid;
   place-items: center;
   padding: 20px;
@@ -1263,20 +1281,20 @@
 }
 
 .dark .theme-options button {
-  background: rgba(15, 23, 42, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--muted);
 }
 
 .dark .theme-options button > span {
-  background: rgba(22, 34, 60, 0.9);
-  color: #cbd5e1;
+  background: var(--surface-raised);
+  color: var(--text);
 }
 
 .dark .theme-options button.active {
-  color: #60a5fa;
-  border-color: #3b82f6;
-  background: rgba(37, 99, 235, 0.22);
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .theme-options button i {

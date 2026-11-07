@@ -53,6 +53,12 @@ const TransfersPage = lazy(() =>
 const SecurityCentrePage = lazy(() => import('@/pages/SecurityCentrePage'))
 const WeeklyReportPage = lazy(() => import('@/pages/WeeklyReportPage'))
 const NotificationsPage = lazy(() => import('@/pages/NotificationsPage'))
+const TransactionsPage = lazy(() =>
+  import('@/pages/TransactionsPage').then((module) => ({ default: module.TransactionsPage })),
+)
+const AnalyticsPage = lazy(() =>
+  import('@/pages/AnalyticsPage').then((module) => ({ default: module.AnalyticsPage })),
+)
 
 function Page({ children }: { children: ReactNode }) {
   return <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
@@ -133,6 +139,22 @@ export default function App() {
                       element={
                         <Page>
                           <HomePage />
+                        </Page>
+                      }
+                    />
+                    <Route
+                      path="/transactions"
+                      element={
+                        <Page>
+                          <TransactionsPage />
+                        </Page>
+                      }
+                    />
+                    <Route
+                      path="/analytics"
+                      element={
+                        <Page>
+                          <AnalyticsPage />
                         </Page>
                       }
                     />

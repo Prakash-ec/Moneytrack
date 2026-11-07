@@ -211,12 +211,24 @@ export interface ExpenseTypePeriodSummary {
   daily_trend: TrendPoint[]
 }
 
+export interface DatabaseHealthResponse {
+  status: 'connected' | 'unavailable' | 'degraded'
+  provider: 'neon' | 'postgresql' | 'sqlite' | string
+  dialect: 'postgresql' | 'sqlite' | string
+  connected: boolean
+  schema_status: 'ready' | 'degraded' | 'unavailable'
+}
+
 export interface HealthResponse {
   status: 'ok' | 'degraded'
   app: string
   version: string
   environment: string
   database: 'connected' | 'unavailable'
+  provider?: 'neon' | 'postgresql' | 'sqlite' | string
+  dialect?: 'postgresql' | 'sqlite' | string
+  schema_status?: 'ready' | 'degraded' | 'unavailable'
+  current_revision?: string | null
 }
 
 export interface ExpenseTypeCreateInput {

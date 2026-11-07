@@ -21,7 +21,7 @@ import { formatINR, parseRupeesToPaise } from '@/utils/currency'
 import { formatDate } from '@/utils/dates'
 import { formatRangeLabel } from '@/utils/periods'
 
-export function TransfersPage() {
+export function TransfersPage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Account Transfers')
   const period = usePeriod()
   const { showToast } = useToast()
@@ -117,31 +117,33 @@ export function TransfersPage() {
   }
 
   return (
-    <div className="page">
-      <PageHeader
-        eyebrow="Internal ledger"
-        title="Account transfers"
-        description={`${formatRangeLabel(period.range)} · Inter-account liquidity`}
-        actions={
-          <div className="flex items-center gap-2">
-            <PeriodPicker
-              preset={period.preset}
-              range={period.range}
-              onPresetChange={period.setPreset}
-              onCustomChange={period.setCustomRange}
-            />
-            <Button
-              variant="primary"
-              disabled={bankAccounts.length < 2}
-              onClick={openCreateDialog}
-              title={bankAccounts.length < 2 ? 'You need at least 2 bank accounts to transfer' : undefined}
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              <span>New transfer</span>
-            </Button>
-          </div>
-        }
-      />
+    <div className={embedded ? '' : 'page'}>
+      {!embedded && (
+        <PageHeader
+          eyebrow="Internal ledger"
+          title="Account transfers"
+          description={`${formatRangeLabel(period.range)} · Inter-account liquidity`}
+          actions={
+            <div className="flex items-center gap-2">
+              <PeriodPicker
+                preset={period.preset}
+                range={period.range}
+                onPresetChange={period.setPreset}
+                onCustomChange={period.setCustomRange}
+              />
+              <Button
+                variant="primary"
+                disabled={bankAccounts.length < 2}
+                onClick={openCreateDialog}
+                title={bankAccounts.length < 2 ? 'You need at least 2 bank accounts to transfer' : undefined}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span>New transfer</span>
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       {/* Information Banner */}
       <div className="card p-3.5 sm:p-4 mb-5 flex items-start gap-3 bg-surface-raised border border-border">

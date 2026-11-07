@@ -16,9 +16,9 @@ import { formatINR, formatINRCompact } from '@/utils/currency'
 import { formatDateShort, formatMonth } from '@/utils/dates'
 
 const AXIS_COLOR = '#94a3b8'
-const GRID_COLOR = 'rgba(148, 163, 184, 0.15)'
-const PRIMARY_BLUE = '#2563eb'
-const DARK_BLUE_STROKE = '#1d4ed8'
+const GRID_COLOR = 'rgba(148, 163, 184, 0.12)'
+const PRIMARY_INDIGO = '#6366f1'
+const DARK_INDIGO_STROKE = '#4f46e5'
 
 interface ChartDatum {
   date: string
@@ -118,7 +118,7 @@ export function TrendChart({
         tickFormatter={(value: number) => (value === 0 ? '₹0' : formatINRCompact(value))}
       />
       <Tooltip
-        cursor={{ stroke: PRIMARY_BLUE, strokeWidth: 1.5, strokeDasharray: '3 3', fill: 'rgba(37, 99, 235, 0.08)' }}
+        cursor={{ stroke: PRIMARY_INDIGO, strokeWidth: 1.5, strokeDasharray: '3 3', fill: 'rgba(99, 102, 241, 0.08)' }}
         content={<TrendTooltip granularity={granularity} />}
       />
     </>
@@ -138,7 +138,7 @@ export function TrendChart({
             <Bar
               dataKey="total"
               name="Outflow"
-              fill={PRIMARY_BLUE}
+              fill={PRIMARY_INDIGO}
               radius={[6, 6, 0, 0]}
               maxBarSize={38}
               animationDuration={500}
@@ -148,9 +148,9 @@ export function TrendChart({
           <AreaChart data={data} margin={{ top: 14, right: 12, left: -4, bottom: 4 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={PRIMARY_BLUE} stopOpacity={0.35} />
-                <stop offset="65%" stopColor={DARK_BLUE_STROKE} stopOpacity={0.08} />
-                <stop offset="100%" stopColor={DARK_BLUE_STROKE} stopOpacity={0.0} />
+                <stop offset="0%" stopColor={PRIMARY_INDIGO} stopOpacity={0.35} />
+                <stop offset="65%" stopColor={DARK_INDIGO_STROKE} stopOpacity={0.08} />
+                <stop offset="100%" stopColor={DARK_INDIGO_STROKE} stopOpacity={0.0} />
               </linearGradient>
             </defs>
             {commonAxis}
@@ -158,10 +158,10 @@ export function TrendChart({
               type="monotone"
               dataKey="total"
               name="Outflow"
-              stroke={DARK_BLUE_STROKE}
+              stroke={DARK_INDIGO_STROKE}
               strokeWidth={2.5}
               fill={`url(#${gradientId})`}
-              activeDot={{ r: 5, strokeWidth: 2, stroke: '#ffffff', fill: PRIMARY_BLUE }}
+              activeDot={{ r: 5, strokeWidth: 2, stroke: '#ffffff', fill: PRIMARY_INDIGO }}
               animationDuration={500}
             />
           </AreaChart>

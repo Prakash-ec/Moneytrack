@@ -1,19 +1,19 @@
 import csv
 import hashlib
+import hmac
 import io
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
-from app.core.constants import DEFAULT_TYPE_COLOR, DEFAULT_TYPE_ICON, PaymentMethod
+from app.core.constants import DEFAULT_TYPE_COLOR, DEFAULT_TYPE_ICON
 from app.core.money import format_inr
 from app.core.time import today_ist
 from app.models.account_transfer import AccountTransfer
-from app.models.balance_snapshot import BalanceSnapshot
 from app.models.bank_account import BankAccount
 from app.models.budget import Budget, CategoryBudget
 from app.models.expense import Expense
@@ -21,7 +21,7 @@ from app.models.expense_type import ExpenseType
 from app.models.income import Income
 from app.models.income_type import IncomeType
 from app.services.bank_accounts import recalculate_account_balance
-from app.services.errors import ConflictError
+from app.services.errors import ConflictError, ValidationError
 from app.services.expense_types import name_key
 
 
@@ -130,7 +130,7 @@ def backup_json(
             "schema_version": 1,
             "application": settings.app_name,
             "application_version": settings.app_version,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "expense_types": [
                 {
                     "id": item.id,
@@ -228,7 +228,7 @@ def backup_json(
         "schema_version": 2,
         "application": settings.app_name,
         "application_version": "2.0.0",
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "expense_types": [
             {
                 "id": t.id,
@@ -370,12 +370,28 @@ def restore_json(
             f"Unsupported backup schema version: {schema_version}. Supported versions: {allowed_versions}."
         )
 
+    # ----------------------------------------------------------------- #
+    # Integrity Checksum Verification (Pre-mutation)
+    # ----------------------------------------------------------------- #
+    if schema_version >= 2:
+        if "checksum" not in payload or not isinstance(payload["checksum"], str):
+            raise ValidationError("Backup checksum is missing. Version 2 backups require an integrity checksum.")
+        payload_data = {k: v for k, v in payload.items() if k != "checksum"}
+        raw_bytes = json.dumps(payload_data, sort_keys=True).encode("utf-8")
+        computed_hash = hashlib.sha256(raw_bytes).hexdigest()
+        if not hmac.compare_digest(computed_hash, payload["checksum"]):
+            raise ValidationError("Backup checksum verification failed: data may be corrupted or tampered.")
+    elif "checksum" in payload and payload["checksum"]:
+        payload_data = {k: v for k, v in payload.items() if k != "checksum"}
+        raw_bytes = json.dumps(payload_data, sort_keys=True).encode("utf-8")
+        computed_hash = hashlib.sha256(raw_bytes).hexdigest()
+        if not hmac.compare_digest(computed_hash, str(payload["checksum"])):
+            raise ValidationError("Backup checksum verification failed: data may be corrupted or tampered.")
+
     types_data = payload.get("expense_types", [])
     expenses_data = payload.get("expenses", [])
     if not isinstance(types_data, list) or not isinstance(expenses_data, list):
         raise ConflictError("Backup missing required 'expense_types' or 'expenses' list.")
-
-    backup_types_by_id = {item.get("id"): item for item in types_data if isinstance(item, dict) and item.get("id")}
 
     # Begin atomic transaction
     try:
@@ -387,6 +403,7 @@ def restore_json(
         restored_incomes_count = 0
         restored_transfers_count = 0
         restored_budgets_count = 0
+        restored_category_budgets_count = 0
 
         # ------------------------------------------------------------- #
         # 1. Restore & Map Expense Types
@@ -448,10 +465,10 @@ def restore_json(
                 if not b_name or not mask:
                     continue
 
-                sig = (b_name.lower(), mask)
-                if sig in existing_acc_by_sig:
+                acc_sig = (b_name.lower(), mask)
+                if acc_sig in existing_acc_by_sig:
                     if aid:
-                        account_id_map[aid] = existing_acc_by_sig[sig].id
+                        account_id_map[aid] = existing_acc_by_sig[acc_sig].id
                 else:
                     op_date = date.today()
                     if acc_data.get("opening_balance_date"):
@@ -478,7 +495,7 @@ def restore_json(
                     )
                     db.add(new_acc)
                     db.flush()
-                    existing_acc_by_sig[sig] = new_acc
+                    existing_acc_by_sig[acc_sig] = new_acc
                     if aid:
                         account_id_map[aid] = new_acc.id
                     restored_accounts_count += 1
@@ -571,8 +588,8 @@ def restore_json(
             merchant = str(merchant).strip()[:120] if merchant else None
             method = exp.get("payment_method")
 
-            sig = (target_type_id, amt, exp_date, note, method, merchant)
-            if sig in existing_exp_signatures:
+            exp_sig = (target_type_id, amt, exp_date, note, method, merchant)
+            if exp_sig in existing_exp_signatures:
                 skipped_expenses_count += 1
                 continue
 
@@ -587,7 +604,7 @@ def restore_json(
                 merchant=merchant,
             )
             db.add(new_expense)
-            existing_exp_signatures.add(sig)
+            existing_exp_signatures.add(exp_sig)
             restored_expenses_count += 1
 
         # ------------------------------------------------------------- #
@@ -637,8 +654,8 @@ def restore_json(
 
                 payer = inc_data.get("payer")
                 desc = inc_data.get("description")
-                sig = (amt, inc_date, payer, desc)
-                if sig in existing_inc_signatures:
+                inc_sig = (amt, inc_date, payer, desc)
+                if inc_sig in existing_inc_signatures:
                     continue
 
                 new_inc = Income(
@@ -654,7 +671,7 @@ def restore_json(
                     source=inc_data.get("source", "restore"),
                 )
                 db.add(new_inc)
-                existing_inc_signatures.add(sig)
+                existing_inc_signatures.add(inc_sig)
                 restored_incomes_count += 1
 
         # ------------------------------------------------------------- #
@@ -717,6 +734,43 @@ def restore_json(
                     db.add(Budget(user_id=user_id, budget_period=period, amount_paise=amt))
                     restored_budgets_count += 1
 
+        # ------------------------------------------------------------- #
+        # 8. Restore Category Budgets (v2 only)
+        # ------------------------------------------------------------- #
+        if schema_version >= 2 and "category_budgets" in payload:
+            for cb_data in payload.get("category_budgets", []):
+                if not isinstance(cb_data, dict):
+                    continue
+                amt = cb_data.get("amount_paise")
+                if not isinstance(amt, int) or amt < 0:
+                    continue
+                cat = (cb_data.get("category") or "").strip()
+                if not cat:
+                    continue
+                try:
+                    period = date.fromisoformat(str(cb_data.get("budget_period")))
+                    period = date(period.year, period.month, 1)
+                except (ValueError, TypeError):
+                    continue
+
+                cb_stmt = select(CategoryBudget).where(
+                    CategoryBudget.budget_period == period,
+                    CategoryBudget.category == cat,
+                )
+                if user_id is not None:
+                    cb_stmt = cb_stmt.where(CategoryBudget.user_id == user_id)
+                existing_cb = db.scalar(cb_stmt)
+                if not existing_cb:
+                    db.add(
+                        CategoryBudget(
+                            user_id=user_id,
+                            budget_period=period,
+                            category=cat,
+                            amount_paise=amt,
+                        )
+                    )
+                    restored_category_budgets_count += 1
+
         db.commit()
 
         # Recalculate balances for all affected accounts
@@ -740,10 +794,12 @@ def restore_json(
         "restored_incomes": restored_incomes_count,
         "restored_transfers": restored_transfers_count,
         "restored_budgets": restored_budgets_count,
+        "restored_category_budgets": restored_category_budgets_count,
         "message": (
             f"Successfully restored {restored_expenses_count} expense(s), "
             f"{restored_incomes_count} income(s), {restored_accounts_count} account(s), "
-            f"and {restored_transfers_count} transfer(s) across "
+            f"{restored_transfers_count} transfer(s), {restored_budgets_count} budget(s), "
+            f"and {restored_category_budgets_count} category budget(s) across "
             f"{restored_types_count + matched_types_count} category(ies)."
             + (f" {skipped_expenses_count} duplicate(s) were skipped." if skipped_expenses_count else "")
         ),

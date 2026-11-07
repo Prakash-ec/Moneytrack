@@ -19,6 +19,7 @@ import type {
   ExpenseTypeUpdateInput,
   ExpenseUpdateInput,
   Granularity,
+  DatabaseHealthResponse,
   HealthResponse,
   Income,
   IncomeCreateInput,
@@ -448,6 +449,7 @@ function patchBody(payload: unknown): RequestOptions {
 
 export const api = {
   health: () => request<HealthResponse>('/health'),
+  databaseHealth: () => request<DatabaseHealthResponse>('/health/db'),
   testConnection,
 
   listExpenseTypes: (params: ExpenseTypeListParams = {}) =>

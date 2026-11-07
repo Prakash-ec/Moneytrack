@@ -34,7 +34,7 @@ import { cn } from '@/utils/cn'
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-export function TrendsPage() {
+export function TrendsPage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Spending Trends')
   const period = usePeriod()
   const { openCreate } = useExpenseDialog()
@@ -173,22 +173,24 @@ export function TrendsPage() {
   }
 
   return (
-    <div className="page pb-20">
-      <PageHeader
-        eyebrow="Trends & velocity"
-        title="Spending trends"
-        description="Monitor temporal trajectories, spending velocity, and habit cycles."
-        actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <PeriodPicker
-              preset={period.preset}
-              range={period.range}
-              onPresetChange={period.setPreset}
-              onCustomChange={period.setCustomRange}
-            />
-          </div>
-        }
-      />
+    <div className={embedded ? '' : 'page pb-20'}>
+      {!embedded && (
+        <PageHeader
+          eyebrow="Trends & velocity"
+          title="Spending trends"
+          description="Monitor temporal trajectories, spending velocity, and habit cycles."
+          actions={
+            <div className="flex items-center gap-2 flex-wrap">
+              <PeriodPicker
+                preset={period.preset}
+                range={period.range}
+                onPresetChange={period.setPreset}
+                onCustomChange={period.setCustomRange}
+              />
+            </div>
+          }
+        />
+      )}
 
       {/* Quick Period Horizon Selector */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-4 no-scrollbar">

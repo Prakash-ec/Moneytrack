@@ -105,8 +105,8 @@ export function CashflowHeroCard({
         </div>
 
         {/* Hero Amount */}
-        <div className="flex items-baseline justify-between mb-4">
-          <div className="font-mono tabular-nums text-3xl sm:text-4xl font-semibold tracking-tight text-text">
+        <div className="flex items-baseline justify-between mb-4 gap-2 min-w-0">
+          <div className="font-display tabular-nums text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-text truncate">
             {showBalance ? formatINR(totalBankBalancePaise) : '••••••••'}
           </div>
           {linkedAccountsCount > 0 && onManageAccounts ? (

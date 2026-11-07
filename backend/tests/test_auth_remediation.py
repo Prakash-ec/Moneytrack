@@ -15,19 +15,20 @@ from app.services.errors import ConflictError
 
 
 def test_production_secret_key_validation():
+    pg_url = "postgresql://user:pass@localhost:5432/db"
     # 1. In production with missing secret -> must raise ValueError
     with pytest.raises(ValueError, match="CRITICAL SECURITY CONFIGURATION ERROR"):
-        Settings(environment="production", database_url="sqlite:///dummy.db", secret_key="")
+        Settings(environment="production", database_url=pg_url, secret_key="")
 
     # 2. In production with short secret -> must raise ValueError
     with pytest.raises(ValueError, match="CRITICAL SECURITY CONFIGURATION ERROR"):
-        Settings(environment="production", database_url="sqlite:///dummy.db", secret_key="short-key")
+        Settings(environment="production", database_url=pg_url, secret_key="short-key")
 
     # 3. In production with known placeholder -> must raise ValueError
     with pytest.raises(ValueError, match="CRITICAL SECURITY CONFIGURATION ERROR"):
         Settings(
             environment="production",
-            database_url="sqlite:///dummy.db",
+            database_url=pg_url,
             secret_key="moneytrack-insecure-default-change-in-production-secret-key-32chars",
         )
 
@@ -35,7 +36,7 @@ def test_production_secret_key_validation():
     strong_key = "a-very-strong-and-secure-production-secret-key-64chars-long-abcdef123456"
     s = Settings(
         environment="production",
-        database_url="sqlite:///dummy.db",
+        database_url=pg_url,
         secret_key=strong_key,
     )
     assert s.secret_key == strong_key

@@ -50,7 +50,7 @@ export function ExpenseDonut({
   const data: DonutDatum[] = visible.map((item) => ({
     name: item.name,
     value: item.total_paise,
-    color: item.color || '#1d4ed8',
+    color: item.color || '#6366f1',
     share: item.share_percent,
     typeId: item.expense_type_id,
   }))
@@ -60,7 +60,7 @@ export function ExpenseDonut({
     data.push({
       name: `Other (${remaining.length})`,
       value: remainingTotal,
-      color: '#94a3b8',
+      color: '#64748b',
       share: totalPaise > 0 ? (remainingTotal * 100) / totalPaise : 0,
     })
   }

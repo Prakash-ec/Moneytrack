@@ -28,7 +28,7 @@ import { formatINR, parseRupeesToPaise } from '@/utils/currency'
 import { formatDate } from '@/utils/dates'
 import { formatRangeLabel } from '@/utils/periods'
 
-export function IncomePage() {
+export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Income & Inflows')
   const period = usePeriod()
   const { showToast } = useToast()
@@ -192,26 +192,28 @@ export function IncomePage() {
   }
 
   return (
-    <div className="page">
-      <PageHeader
-        eyebrow="Cashflow"
-        title="Income & Earnings"
-        description={`${formatRangeLabel(period.range)} · Inflows`}
-        actions={
-          <div className="flex items-center gap-2">
-            <PeriodPicker
-              preset={period.preset}
-              range={period.range}
-              onPresetChange={period.setPreset}
-              onCustomChange={period.setCustomRange}
-            />
-            <Button variant="primary" onClick={openCreateDialog}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              <span>Add income</span>
-            </Button>
-          </div>
-        }
-      />
+    <div className={embedded ? '' : 'page'}>
+      {!embedded && (
+        <PageHeader
+          eyebrow="Cashflow"
+          title="Income & Earnings"
+          description={`${formatRangeLabel(period.range)} · Inflows`}
+          actions={
+            <div className="flex items-center gap-2">
+              <PeriodPicker
+                preset={period.preset}
+                range={period.range}
+                onPresetChange={period.setPreset}
+                onCustomChange={period.setCustomRange}
+              />
+              <Button variant="primary" onClick={openCreateDialog}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span>Add income</span>
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">

@@ -253,17 +253,17 @@ export function FintechCard3D({
               )}
             </div>
 
-            <div className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-display drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)] mt-1">
+            <div className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-display tabular-nums drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)] mt-1">
               {showBalance ? formatINR(displayAmount) : '••••••••'}
             </div>
 
             {/* Income & Expense Live Indicators */}
             <div className="flex items-center gap-3 mt-2">
-              <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-400/20">
+              <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-400/20 tabular-nums">
                 <ArrowDownLeft className="h-3 w-3" aria-hidden="true" />
                 <span>In: {showBalance ? formatINR(incomeTotalPaise) : '•••'}</span>
               </div>
-              <div className="flex items-center gap-1 text-[11px] font-medium text-rose-300 bg-rose-500/15 px-2 py-0.5 rounded-full border border-rose-400/20">
+              <div className="flex items-center gap-1 text-[11px] font-medium text-rose-300 bg-rose-500/15 px-2 py-0.5 rounded-full border border-rose-400/20 tabular-nums">
                 <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                 <span>Out: {showBalance ? formatINR(totalPaise) : '•••'}</span>
               </div>
@@ -282,7 +282,7 @@ export function FintechCard3D({
                 •••• •••• •••• 8824
               </div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-white/65 mt-0.5">
-                Local SQLite · Zero Cloud
+                Encrypted · Zero Tracking
               </div>
             </div>
 

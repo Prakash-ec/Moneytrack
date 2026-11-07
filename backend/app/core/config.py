@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic import model_validator
@@ -21,6 +22,10 @@ class Settings(BaseSettings):
     # DATABASE_URL (for example a PostgreSQL DSN on Neon or Render) without touching code.
     database_url: str = f"sqlite:///{(DATA_DIR / 'moneytrack.db').as_posix()}"
 
+    # Dedicated local environment variable for connecting local development to Neon PostgreSQL.
+    # Set NEON_DATABASE_URL in backend/.env to use Neon locally without committing credentials.
+    neon_database_url: str | None = None
+
     # Comma-separated browser and mobile app origins allowed to call the API directly.
     # Accepts either CORS_ORIGINS or ALLOWED_ORIGINS environment variable.
     # Capacitor on Android serves from https://localhost; Capacitor on iOS serves from capacitor://localhost.
@@ -39,6 +44,10 @@ class Settings(BaseSettings):
 
     # Optional: mount the built frontend from frontend/dist when present.
     serve_frontend: bool = True
+
+    # Controls whether FastAPI lifespan attempts to run Alembic migrations on startup.
+    # In production (Render), migrations run exclusively via deployment startCommand.
+    run_startup_migrations: bool = True
 
     # Groq vision (image analysis) configuration.
     # GROQ_API_KEY must be set in backend/.env (never committed). GROQ_MODEL selects
@@ -77,7 +86,24 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
-        is_prod = self.environment.lower() in ("production", "prod") or not self.is_sqlite
+        # Support NEON_DATABASE_URL for local development if database_url wasn't explicitly changed
+        default_sqlite = f"sqlite:///{(DATA_DIR / 'moneytrack.db').as_posix()}"
+        if self.neon_database_url and self.neon_database_url.strip():
+            if not self.database_url or self.database_url == default_sqlite:
+                self.database_url = self.neon_database_url.strip()
+
+        is_production_env = (
+            self.environment.lower() in ("production", "prod")
+            or os.environ.get("RENDER", "").lower() == "true"
+        )
+
+        # Enforce that production never silently falls back to SQLite
+        if is_production_env and self.is_sqlite:
+            raise ValueError(
+                "CRITICAL CONFIGURATION ERROR: Production environment cannot use SQLite. "
+                "A valid PostgreSQL DATABASE_URL (such as Neon PostgreSQL) must be configured."
+            )
+
         known_placeholders = {
             "moneytrack-insecure-default-change-in-production-secret-key-32chars",
             "changeme",
@@ -91,7 +117,7 @@ class Settings(BaseSettings):
         }
         stripped_key = (self.secret_key or "").strip()
 
-        if is_prod:
+        if is_production_env:
             if not stripped_key or len(stripped_key) < 32 or stripped_key.lower() in known_placeholders:
                 raise ValueError(
                     "CRITICAL SECURITY CONFIGURATION ERROR: A strong, cryptographically secure SECRET_KEY "
@@ -122,6 +148,22 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.strip().startswith("sqlite")
+
+    @property
+    def is_neon(self) -> bool:
+        return "neon.tech" in self.database_url.lower()
+
+    @property
+    def database_provider(self) -> str:
+        if self.is_sqlite:
+            return "sqlite"
+        if self.is_neon:
+            return "neon"
+        return "postgresql"
+
+    @property
+    def database_dialect(self) -> str:
+        return "sqlite" if self.is_sqlite else "postgresql"
 
     @property
     def cors_origin_list(self) -> list[str]:

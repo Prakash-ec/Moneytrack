@@ -46,7 +46,7 @@ const PAYMENT_METHOD_META: Record<
   other: { label: 'Other / Direct', icon: Wallet, color: '#64748b' },
 }
 
-export function BreakdownPage() {
+export function BreakdownPage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Spending Breakdown')
   const period = usePeriod()
   const navigate = useNavigate()
@@ -179,26 +179,28 @@ export function BreakdownPage() {
   }
 
   return (
-    <div className="page pb-20">
-      <PageHeader
-        eyebrow="Allocation & shares"
-        title="Spending breakdown"
-        description="Comprehensive category distributions, payment channels, and merchant outflow."
-        actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <PeriodPicker
-              preset={period.preset}
-              range={period.range}
-              onPresetChange={period.setPreset}
-              onCustomChange={period.setCustomRange}
-            />
-            <Button variant="primary" onClick={() => openCreate()}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              <span>Add expense</span>
-            </Button>
-          </div>
-        }
-      />
+    <div className={embedded ? '' : 'page pb-20'}>
+      {!embedded && (
+        <PageHeader
+          eyebrow="Allocation & shares"
+          title="Spending breakdown"
+          description="Comprehensive category distributions, payment channels, and merchant outflow."
+          actions={
+            <div className="flex items-center gap-2 flex-wrap">
+              <PeriodPicker
+                preset={period.preset}
+                range={period.range}
+                onPresetChange={period.setPreset}
+                onCustomChange={period.setCustomRange}
+              />
+              <Button variant="primary" onClick={() => openCreate()}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span>Add expense</span>
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       {/* Quick Period Horizon Selector */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-4 no-scrollbar">

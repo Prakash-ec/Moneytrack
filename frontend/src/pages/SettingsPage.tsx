@@ -15,6 +15,7 @@ import {
   Server,
   Smartphone,
   Sun,
+  Tags,
   Trash2,
   Upload,
   User as UserIcon,
@@ -79,6 +80,55 @@ export function SettingsPage() {
   const [requestingPermission, setRequestingPermission] = useState(false)
   const [clearQueueConfirmOpen, setClearQueueConfirmOpen] = useState(false)
   const [clearingQueue, setClearingQueue] = useState(false)
+
+  // Database status
+  const [dbStatus, setDbStatus] = useState<{
+    provider: string
+    connected: boolean
+    status: string
+  }>({
+    provider: 'sqlite',
+    connected: true,
+    status: 'connected',
+  })
+
+  useEffect(() => {
+    let active = true
+    api.databaseHealth()
+      .then((res) => {
+        if (active) {
+          setDbStatus({
+            provider: res.provider || 'sqlite',
+            connected: res.connected,
+            status: res.status,
+          })
+        }
+      })
+      .catch(() => {
+        api.health()
+          .then((res) => {
+            if (active) {
+              setDbStatus({
+                provider: res.provider || 'sqlite',
+                connected: res.database === 'connected',
+                status: res.status,
+              })
+            }
+          })
+          .catch(() => {
+            if (active) {
+              setDbStatus({
+                provider: 'unknown',
+                connected: false,
+                status: 'unavailable',
+              })
+            }
+          })
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const loadSmsSettings = useCallback(async () => {
     try {
@@ -413,6 +463,24 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {/* Categories & Taxonomies */}
+      <section className="settings-section">
+        <div className="settings-heading">
+          <h2>Categories & Taxonomies</h2>
+          <p>Organize expense and income taxonomies, colors, and icons.</p>
+        </div>
+        <div className="card p-4 sm:p-5 flex items-center justify-between">
+          <div>
+            <strong className="text-sm font-semibold text-text block">Manage Expense Categories</strong>
+            <p className="text-xs text-muted mt-0.5">Customize categories, archive unused types, and configure icons.</p>
+          </div>
+          <Link to="/expense-types" className="button button-secondary button-sm shrink-0 flex items-center gap-1.5">
+            <Tags className="h-4 w-4 text-muted" aria-hidden="true" />
+            <span>Manage types</span>
+          </Link>
+        </div>
+      </section>
+
       {/* Section 2: Connection */}
       <section className="settings-section">
         <div className="settings-heading">
@@ -518,11 +586,27 @@ export function SettingsPage() {
                 <Database size={18} />
               </span>
               <div className="setting-text">
-                <h3>Offline status & storage</h3>
-                <p>All changes saved locally on this device in SQLite</p>
+                <h3>Database & storage</h3>
+                <p>
+                  {dbStatus.provider === 'neon'
+                    ? 'Connected to Neon PostgreSQL (Serverless Cloud)'
+                    : dbStatus.provider === 'postgresql'
+                    ? 'Connected to PostgreSQL Cloud Database'
+                    : dbStatus.connected
+                    ? 'All changes saved locally on this device in SQLite'
+                    : 'Backend database is offline'}
+                </p>
               </div>
             </div>
-            <Badge tone="positive">Ready</Badge>
+            <Badge tone={dbStatus.connected ? 'positive' : 'danger'}>
+              {dbStatus.provider === 'neon'
+                ? 'Neon PG'
+                : dbStatus.provider === 'postgresql'
+                ? 'PostgreSQL'
+                : dbStatus.connected
+                ? 'Local SQLite'
+                : 'Offline'}
+            </Badge>
           </div>
         </div>
       </section>

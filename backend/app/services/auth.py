@@ -1,6 +1,7 @@
+import threading
 from typing import Any
 
-from sqlalchemy import update
+from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -102,44 +103,52 @@ def claim_legacy_records_for_user(db: Session, user_id: int, commit: bool = True
         db.commit()
 
 
+_bootstrap_lock = threading.Lock()
+
+
 def register_user(db: Session, data: UserCreate) -> tuple[User, str]:
     """Registers a new user, hashes password securely, and handles owner setup.
     Registration policy:
     - First user can always register (instance bootstrap).
     - Subsequent registrations require settings.allow_registration == True.
     - User creation and legacy data adoption execute atomically in a single transaction.
+    - Concurrency is protected via PostgreSQL advisory lock and process threading lock.
     """
-    user_count = db.query(User).count()
-    is_first_user = user_count == 0
+    with _bootstrap_lock:
+        if db.bind and db.bind.dialect.name == "postgresql":
+            db.execute(text("SELECT pg_advisory_xact_lock(84729103)"))
 
-    current_settings = get_settings()
-    if not is_first_user and not current_settings.allow_registration:
-        raise ConflictError("Registration is disabled on this instance.")
+        user_count = db.query(User).count()
+        is_first_user = user_count == 0
 
-    email = data.email.strip().lower()
-    existing = db.query(User).filter(User.email == email).first()
-    if existing:
-        raise ConflictError("A user with this email already exists.")
+        current_settings = get_settings()
+        if not is_first_user and not current_settings.allow_registration:
+            raise ConflictError("Registration is disabled on this instance.")
 
-    user = User(
-        email=email,
-        hashed_password=hash_password(data.password),
-        full_name=data.full_name.strip() if data.full_name else None,
-        is_active=True,
-        is_superuser=is_first_user,
-    )
-    db.add(user)
-    db.flush()  # Generate user.id within current transaction
+        email = data.email.strip().lower()
+        existing = db.query(User).filter(User.email == email).first()
+        if existing:
+            raise ConflictError("A user with this email already exists.")
 
-    # If this is the initial instance owner, claim any unowned legacy data atomically
-    if is_first_user:
-        claim_legacy_records_for_user(db, user.id, commit=False)
+        user = User(
+            email=email,
+            hashed_password=hash_password(data.password),
+            full_name=data.full_name.strip() if data.full_name else None,
+            is_active=True,
+            is_superuser=is_first_user,
+        )
+        db.add(user)
+        db.flush()  # Generate user.id within current transaction
 
-    db.commit()
-    db.refresh(user)
+        # If this is the initial instance owner, claim any unowned legacy data atomically
+        if is_first_user:
+            claim_legacy_records_for_user(db, user.id, commit=False)
 
-    token = create_access_token(subject=user.id)
-    return user, token
+        db.commit()
+        db.refresh(user)
+
+        token = create_access_token(subject=user.id)
+        return user, token
 
 
 def authenticate_user(db: Session, data: UserLogin) -> tuple[User, str]:

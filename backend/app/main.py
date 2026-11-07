@@ -1,22 +1,22 @@
 import asyncio
-from contextlib import asynccontextmanager
 import logging
 import mimetypes
 import os
-from pathlib import Path
 import re
 import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-
 from sqlalchemy import text
+
 from app.api.router import api_router
 from app.core.config import settings
-from app.services.errors import ConflictError, NotFoundError, PeriodError
+from app.services.errors import ConflictError, NotFoundError, PeriodError, ValidationError
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("text/javascript", ".js")
@@ -26,10 +26,14 @@ logger = logging.getLogger("uvicorn.error")
 
 
 def run_startup_migrations() -> None:
-    """Safely verify and run Alembic migrations on startup.
-    Fails startup clearly if a migration fails, preventing the app from
-    running with an unmigrated or broken schema.
+    """Safely verify and run Alembic migrations on startup in development environments.
+    In production environments (e.g. Render), migrations are exclusively executed
+    by the deployment release/startCommand to prevent concurrent migration execution.
     """
+    if not settings.run_startup_migrations or os.environ.get("RUN_STARTUP_MIGRATIONS", "").lower() in ("0", "false", "no"):
+        logger.info("Startup migrations skipped (managed by deployment pipeline).")
+        return
+
     from alembic import command
     from alembic.config import Config
 
@@ -258,6 +262,11 @@ async def handle_period_error(request: Request, exc: PeriodError) -> JSONRespons
     return JSONResponse(status_code=400, content={"detail": exc.message})
 
 
+@app.exception_handler(ValidationError)
+async def handle_validation_error(request: Request, exc: ValidationError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": exc.message})
+
+
 app.include_router(api_router, prefix=settings.api_prefix)
 
 
@@ -287,7 +296,8 @@ def root_health():
             db_status = "unavailable"
             schema_status = "unavailable"
 
-    dialect = "sqlite" if settings.is_sqlite else "postgresql"
+    dialect = settings.database_dialect
+    provider = settings.database_provider
     is_ok = db_status == "connected" and schema_status == "ready"
     return {
         "status": "ok" if is_ok else "degraded",
@@ -295,10 +305,21 @@ def root_health():
         "version": settings.app_version,
         "environment": settings.environment,
         "database": db_status,
+        "provider": provider,
         "dialect": dialect,
         "schema_status": schema_status,
         "current_revision": current_rev,
     }
+
+
+@app.get("/health/db", include_in_schema=False)
+def root_health_db():
+    """Root database status endpoint."""
+    from app.api.routes.health import database_health
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as session:
+        return database_health(db=session)
 
 
 if FRONTEND_DIST.exists():

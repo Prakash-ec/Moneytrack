@@ -304,12 +304,14 @@ export function TypeFormDialog({
                   aria-label={`Use colour ${option}`}
                   aria-pressed={selected}
                   className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-full border-2 transition',
-                    selected ? 'scale-110 border-ink' : 'border-transparent hover:scale-105',
+                    'flex h-9 w-9 items-center justify-center rounded-full transition relative',
+                    selected
+                      ? 'scale-110 ring-2 ring-primary ring-offset-2 ring-offset-surface shadow-sm'
+                      : 'border border-black/10 dark:border-white/15 hover:scale-105',
                   )}
                   style={{ backgroundColor: option }}
                 >
-                  {selected ? <Check className="h-4 w-4 text-white" aria-hidden /> : null}
+                  {selected ? <Check className="h-4 w-4 text-white drop-shadow-sm" aria-hidden /> : null}
                 </button>
               )
             })}

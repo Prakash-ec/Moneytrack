@@ -1,12 +1,15 @@
-from datetime import date, datetime, timezone
 import math
+from datetime import UTC, date, datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.models.bank_account import BankAccount
 from app.models.income import Income
 from app.models.income_type import IncomeType
 from app.schemas.income import IncomeCreate, IncomeList, IncomeRead, IncomeUpdate
 from app.services.bank_accounts import recalculate_account_balance
+from app.services.errors import ConflictError, NotFoundError
 
 
 def get_income(db: Session, income_id: int, user_id: int | None = None) -> Income | None:
@@ -116,6 +119,23 @@ def create_income(
     desc = payload.description or payload.note
     ref = payload.bank_reference or payload.reference
 
+    # Verify income type ownership (must belong to authenticated user OR be system global)
+    income_type = db.get(IncomeType, payload.income_type_id)
+    if income_type is None:
+        raise NotFoundError("Income type not found.")
+    if user_id is not None and income_type.user_id is not None and income_type.user_id != user_id:
+        raise NotFoundError("Income type not found.")
+    if income_type.is_archived:
+        raise ConflictError("Cannot add an income to an archived income type.")
+
+    # Verify bank account ownership (must belong to authenticated user)
+    if payload.account_id is not None:
+        bank_acc = db.get(BankAccount, payload.account_id)
+        if not bank_acc:
+            raise NotFoundError("Bank account not found.")
+        if user_id is not None and bank_acc.user_id is not None and bank_acc.user_id != user_id:
+            raise NotFoundError("Bank account not found.")
+
     income = Income(
         user_id=user_id,
         income_type_id=payload.income_type_id,
@@ -155,6 +175,23 @@ def update_income(
 
     prev_account_id = income.account_id
     data = payload.model_dump(exclude_unset=True)
+
+    if "income_type_id" in data and data["income_type_id"] is not None:
+        income_type = db.get(IncomeType, data["income_type_id"])
+        if income_type is None:
+            raise NotFoundError("Income type not found.")
+        if user_id is not None and income_type.user_id is not None and income_type.user_id != user_id:
+            raise NotFoundError("Income type not found.")
+        if income_type.is_archived:
+            raise ConflictError("Cannot move an income to an archived income type.")
+
+    if "account_id" in data and data["account_id"] is not None:
+        bank_acc = db.get(BankAccount, data["account_id"])
+        if not bank_acc:
+            raise NotFoundError("Bank account not found.")
+        if user_id is not None and bank_acc.user_id is not None and bank_acc.user_id != user_id:
+            raise NotFoundError("Bank account not found.")
+
     if "note" in data and "description" not in data:
         data["description"] = data.pop("note")
     elif "note" in data:
@@ -168,7 +205,7 @@ def update_income(
         if hasattr(income, field):
             setattr(income, field, val)
 
-    income.updated_at = datetime.now(timezone.utc)
+    income.updated_at = datetime.now(UTC)
     db.commit()
 
     # Recalculate old and new account balances

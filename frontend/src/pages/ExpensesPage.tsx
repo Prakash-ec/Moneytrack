@@ -41,7 +41,7 @@ const SORT_OPTIONS: Array<{ value: SortOrder; label: string }> = [
 
 const VALID_SORTS = new Set(SORT_OPTIONS.map((option) => option.value))
 
-export function ExpensesPage() {
+export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Expenses')
   const period = usePeriod()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -282,34 +282,36 @@ export function ExpensesPage() {
   }
 
   return (
-    <div className="page">
-      <PageHeader
-        eyebrow="Transactions"
-        title="Expenses"
-        description="Search, review, and manage your transactions."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              onClick={handleExportCsv}
-              disabled={exporting}
-              className="hidden sm:inline-flex"
-              title="Download expenses as CSV spreadsheet"
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              <span>{exporting ? 'Exporting…' : 'Export CSV'}</span>
-            </Button>
-            <Button variant="secondary" onClick={() => openScanReceipt()}>
-              <Camera className="h-4 w-4" aria-hidden="true" />
-              <span>Scan receipt</span>
-            </Button>
-            <Button variant="primary" onClick={() => openCreate()}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              <span>Add expense</span>
-            </Button>
-          </div>
-        }
-      />
+    <div className={embedded ? '' : 'page'}>
+      {!embedded && (
+        <PageHeader
+          eyebrow="Transactions"
+          title="Expenses"
+          description="Search, review, and manage your transactions."
+          actions={
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={handleExportCsv}
+                disabled={exporting}
+                className="hidden sm:inline-flex"
+                title="Download expenses as CSV spreadsheet"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                <span>{exporting ? 'Exporting…' : 'Export CSV'}</span>
+              </Button>
+              <Button variant="secondary" onClick={() => openScanReceipt()}>
+                <Camera className="h-4 w-4" aria-hidden="true" />
+                <span>Scan receipt</span>
+              </Button>
+              <Button variant="primary" onClick={() => openCreate()}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span>Add expense</span>
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       <div className="filter-bar">
         <label className="search-field">

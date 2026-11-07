@@ -11,14 +11,13 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import utc_now
 from app.db.base import Base, UTCDateTime
 
 if TYPE_CHECKING:
-    from app.models.expense import Expense
-    from app.models.expense_type import ExpenseType
+    pass
 
 
 class Budget(Base):
@@ -28,8 +27,8 @@ class Budget(Base):
     __table_args__ = (
         CheckConstraint("amount_paise >= 0", name="ck_budgets_amount_nonnegative"),
         Index("ix_budgets_period", "budget_period"),
-        # Unique constraint: only one budget per calendar month
-        UniqueConstraint("budget_period", name="uq_budgets_one_per_period"),
+        # Tenant-aware unique constraint: one budget per calendar month per user
+        UniqueConstraint("user_id", "budget_period", name="uq_budgets_user_period"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -59,8 +58,8 @@ class CategoryBudget(Base):
     __table_args__ = (
         CheckConstraint("amount_paise >= 0", name="ck_category_budgets_amount_nonnegative"),
         Index("ix_category_budgets_period_category", "budget_period", "category"),
-        # Unique constraint: only one category budget per period per category
-        UniqueConstraint("budget_period", "category", name="uq_category_budgets_one_per_period_category"),
+        # Tenant-aware unique constraint: one category budget per period per category per user
+        UniqueConstraint("user_id", "budget_period", "category", name="uq_category_budgets_user_period_category"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

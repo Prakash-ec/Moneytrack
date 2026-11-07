@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Bell,
   Building2,
-  Calendar,
   Camera,
   Database,
   LayoutDashboard,
@@ -14,7 +13,6 @@ import {
   MoreHorizontal,
   PieChart,
   Plus,
-  Receipt,
   RefreshCw,
   Search,
   Settings,
@@ -52,25 +50,17 @@ interface NavItem {
 
 const SIDEBAR_NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/expenses', label: 'Expenses', icon: Receipt },
-  { to: '/income', label: 'Income', icon: ArrowDownLeft },
-  { to: '/bank-accounts', label: 'Bank Accounts', icon: Building2 },
-  { to: '/transfers', label: 'Transfers', icon: ArrowLeftRight },
-  { to: '/breakdown', label: 'Breakdown', icon: PieChart },
-  { to: '/expense-types', label: 'Expense Types', icon: Tags },
-  { to: '/trends', label: 'Trends', icon: TrendingUp },
-  { to: '/weekly-report', label: 'Weekly Report', icon: Calendar },
-  { to: '/security', label: 'Security Centre', icon: ShieldCheck },
-  { to: '/sms-review', label: 'SMS Review', icon: MessageSquareText },
-  { to: '/notifications', label: 'Notifications', icon: Bell },
+  { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
+  { to: '/bank-accounts', label: 'Accounts', icon: Building2 },
+  { to: '/analytics', label: 'Analytics', icon: PieChart },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 const MOBILE_NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Home', icon: LayoutDashboard, end: true },
-  { to: '/expenses', label: 'Expenses', icon: Receipt },
-  { to: '/bank-accounts', label: 'Banks', icon: Building2 },
-  { to: '/weekly-report', label: 'Report', icon: Calendar },
+  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/transactions', label: 'Ledger', icon: ArrowLeftRight },
+  { to: '/bank-accounts', label: 'Accounts', icon: Building2 },
+  { to: '/analytics', label: 'Insights', icon: PieChart },
 ]
 
 function Brand({ onClick }: { onClick?: () => void }) {
@@ -84,6 +74,108 @@ function Brand({ onClick }: { onClick?: () => void }) {
         <div className="brand-sub">Private ledger</div>
       </div>
     </button>
+  )
+}
+
+function DatabaseStatusBadge() {
+  const [dbState, setDbState] = useState<{
+    provider: string
+    connected: boolean
+    status: string
+  }>({
+    provider: 'sqlite',
+    connected: true,
+    status: 'connected',
+  })
+
+  useEffect(() => {
+    let active = true
+
+    const fetchDbStatus = async () => {
+      try {
+        const res = await api.databaseHealth()
+        if (active) {
+          setDbState({
+            provider: res.provider || 'sqlite',
+            connected: res.connected,
+            status: res.status,
+          })
+        }
+      } catch {
+        try {
+          const fallback = await api.health()
+          if (active) {
+            setDbState({
+              provider: fallback.provider || (fallback.database === 'connected' ? 'sqlite' : 'unknown'),
+              connected: fallback.database === 'connected',
+              status: fallback.status,
+            })
+          }
+        } catch {
+          if (active) {
+            setDbState({
+              provider: 'unknown',
+              connected: false,
+              status: 'unavailable',
+            })
+          }
+        }
+      }
+    }
+
+    void fetchDbStatus()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const getProviderInfo = () => {
+    if (!dbState.connected || dbState.status === 'unavailable') {
+      return {
+        name: 'Database Offline',
+        desc: 'Cannot reach backend database service.',
+        dot: 'bg-rose-500',
+      }
+    }
+    if (dbState.provider === 'neon') {
+      return {
+        name: 'Neon PostgreSQL',
+        desc: 'Neon Serverless Cloud Database connected.',
+        dot: 'bg-emerald-500',
+      }
+    }
+    if (dbState.provider === 'postgresql') {
+      return {
+        name: 'PostgreSQL Database',
+        desc: 'PostgreSQL cloud database connected.',
+        dot: 'bg-emerald-500',
+      }
+    }
+    return {
+      name: 'Local SQLite Database',
+      desc: 'Private on-device storage with zero cloud tracking.',
+      dot: 'bg-emerald-500',
+    }
+  }
+
+  const info = getProviderInfo()
+
+  return (
+    <div className="privacy-note" role="status" aria-label={`Database: ${info.name}`}>
+      <div className="privacy-note-title flex items-center justify-between">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Database className="h-3.5 w-3.5 text-primary flex-shrink-0" aria-hidden="true" />
+          <span className="truncate">{info.name}</span>
+        </div>
+        <span
+          className={cn('h-2 w-2 rounded-full flex-shrink-0', info.dot)}
+          title={dbState.connected ? 'Connected' : 'Offline'}
+        />
+      </div>
+      <div className="privacy-note-desc">
+        {info.desc}
+      </div>
+    </div>
   )
 }
 
@@ -155,15 +247,7 @@ function Sidebar({ unauthorisedSmsCount }: { unauthorisedSmsCount: number }) {
         </div>
       </div>
 
-      <div className="privacy-note">
-        <div className="privacy-note-title">
-          <Database className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-          <span>Local SQLite Database</span>
-        </div>
-        <div className="privacy-note-desc">
-          Your records stay private on this machine with zero cloud tracking.
-        </div>
-      </div>
+      <DatabaseStatusBadge />
     </aside>
   )
 }
@@ -171,9 +255,11 @@ function Sidebar({ unauthorisedSmsCount }: { unauthorisedSmsCount: number }) {
 function Topbar({
   onOpenSearch,
   unreadNotifCount = 0,
+  unauthorisedSmsCount = 0,
 }: {
   onOpenSearch?: () => void
   unreadNotifCount?: number
+  unauthorisedSmsCount?: number
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -236,6 +322,18 @@ function Topbar({
               <Search className="h-4 w-4" aria-hidden="true" />
             </button>
           </>
+        )}
+
+        {unauthorisedSmsCount > 0 && (
+          <Link
+            to="/sms-review"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg bg-primary/10 border border-primary/20 text-primary font-medium hover:bg-primary/20 transition-colors"
+            title={`${unauthorisedSmsCount} new payment alerts`}
+          >
+            <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">{unauthorisedSmsCount} SMS</span>
+            <span className="sm:hidden">{unauthorisedSmsCount}</span>
+          </Link>
         )}
 
         <Link
@@ -480,6 +578,7 @@ export function AppLayout() {
         <Topbar
           onOpenSearch={() => setCommandPaletteOpen(true)}
           unreadNotifCount={unreadNotifCount}
+          unauthorisedSmsCount={unauthorisedSmsCount}
         />
 
         {!online && (
