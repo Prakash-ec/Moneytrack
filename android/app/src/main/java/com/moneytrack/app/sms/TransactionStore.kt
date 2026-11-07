@@ -9,6 +9,7 @@ import org.json.JSONObject
 
 const val QUEUE_FILE_NAME = "sms_transaction_queue.json"
 const val SETTINGS_FILE_NAME = "sms_settings.json"
+const val DEFAULT_PRODUCTION_BACKEND_URL = "https://moneytrack-backend-g5is.onrender.com"
 
 /**
  * Persists transaction candidates and app settings as JSON files in internal
@@ -40,6 +41,22 @@ class TransactionStore(private val context: Context) {
             val updated = current.toMutableList()
             if (index >= 0) updated.set(index, record) else updated.add(record)
             writeQueue(queueFile(), updated)
+        }
+    }
+
+    fun upsertAll(records: List<TransactionRecord>) {
+        if (records.isEmpty()) return
+        synchronized(queueLock) {
+            val current = readQueue(queueFile()).toMutableList()
+            for (record in records) {
+                val index = current.indexOfFirst { it.id == record.id }
+                if (index >= 0) {
+                    current[index] = record
+                } else {
+                    current.add(record)
+                }
+            }
+            writeQueue(queueFile(), current)
         }
     }
 
@@ -91,7 +108,7 @@ class TransactionStore(private val context: Context) {
         val obj = JSONObject(file.readText())
         return SmsSettings(
             smsAutomationEnabled = obj.optBoolean("smsAutomationEnabled", false),
-            backendUrl = obj.optNullableString("backendUrl")?.takeIf { it.isNotBlank() },
+            backendUrl = obj.optNullableString("backendUrl")?.takeIf { it.isNotBlank() } ?: DEFAULT_PRODUCTION_BACKEND_URL,
             notificationsEnabled = obj.optBoolean("notificationsEnabled", true),
         )
     }
@@ -193,10 +210,14 @@ data class TransactionRecord(
 
 data class SmsSettings(
     var smsAutomationEnabled: Boolean = false,
-    var backendUrl: String? = null,
+    var backendUrl: String? = DEFAULT_PRODUCTION_BACKEND_URL,
     var notificationsEnabled: Boolean = true,
 ) {
     companion object {
-        fun defaults() = SmsSettings()
+        fun defaults() = SmsSettings(
+            smsAutomationEnabled = false,
+            backendUrl = DEFAULT_PRODUCTION_BACKEND_URL,
+            notificationsEnabled = true,
+        )
     }
 }

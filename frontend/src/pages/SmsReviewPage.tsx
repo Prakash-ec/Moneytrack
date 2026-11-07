@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   Edit3,
+  History,
   Inbox,
   MessageSquare,
   Phone,
@@ -56,6 +57,9 @@ export function SmsReviewPage() {
   } | null>(null)
   const [rejectConfirm, setRejectConfirm] = useState<{ id: string } | null>(null)
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([])
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importDays, setImportDays] = useState(30)
+  const [importing, setImporting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -341,6 +345,91 @@ export function SmsReviewPage() {
     (i) => i.status === 'PENDING_REVIEW' || i.status === 'READY_TO_SYNC',
   ).length
 
+  const handleImportHistorical = useCallback(async () => {
+    setImporting(true)
+    try {
+      if (isNative) {
+        await SmsPlugin.requestPermissions()
+        const res = await SmsPlugin.importHistoricalSms({ days: importDays })
+        showToast({
+          title: 'SMS import complete',
+          description: `Scanned ${res.totalScanned} messages. Found ${res.eligibleFound} transactions (${res.newImported} imported, ${res.duplicatesSkipped} duplicates skipped).`,
+          variant: 'success',
+        })
+      } else {
+        const sampleCount = importDays === 7 ? 2 : importDays === 30 ? 3 : 5
+        const simulated: PendingTransaction[] = [
+          {
+            id: `sim-hist-${Date.now()}-1`,
+            status: 'PENDING_REVIEW',
+            reason: 'Historical bank SMS debit · Review required',
+            createdAtMs: Date.now() - 86400000 * 2,
+            amount: '1240.00',
+            merchant: 'Swiggy Instamart Bangalore',
+            reference: 'UPI/409218491823',
+            date: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10),
+            category: 'Groceries',
+            note: 'Historical SMS import',
+            sender: 'VM-HDFCBK',
+            error: '',
+            retryCount: 0,
+            notified: false,
+          },
+          {
+            id: `sim-hist-${Date.now()}-2`,
+            status: 'PENDING_REVIEW',
+            reason: 'Historical bank SMS debit · Review required',
+            createdAtMs: Date.now() - 86400000 * 5,
+            amount: '699.00',
+            merchant: 'Jio Prepaid Recharge',
+            reference: 'UPI/408912389182',
+            date: new Date(Date.now() - 86400000 * 5).toISOString().slice(0, 10),
+            category: 'Bills',
+            note: 'Historical SMS import',
+            sender: 'AX-ICICIB',
+            error: '',
+            retryCount: 0,
+            notified: false,
+          },
+          {
+            id: `sim-hist-${Date.now()}-3`,
+            status: 'PENDING_REVIEW',
+            reason: 'Historical bank SMS debit · Review required',
+            createdAtMs: Date.now() - 86400000 * 8,
+            amount: '2450.00',
+            merchant: 'Apollo Pharmacy',
+            reference: 'POS/982173198',
+            date: new Date(Date.now() - 86400000 * 8).toISOString().slice(0, 10),
+            category: 'Healthcare',
+            note: 'Historical SMS import',
+            sender: 'VK-SBIINB',
+            error: '',
+            retryCount: 0,
+            notified: false,
+          },
+        ].slice(0, sampleCount)
+
+        setItems((prev) => [...simulated, ...prev])
+        showToast({
+          title: 'SMS import simulation',
+          description: `Imported ${simulated.length} sample historical transactions for review.`,
+          variant: 'info',
+        })
+      }
+      setImportModalOpen(false)
+      await load()
+      window.dispatchEvent(new CustomEvent('moneytrack:sms-changed'))
+    } catch (error) {
+      showToast({
+        title: 'SMS import failed',
+        description: error instanceof Error ? error.message : 'Please check SMS permissions.',
+        variant: 'error',
+      })
+    } finally {
+      setImporting(false)
+    }
+  }, [isNative, importDays, load, showToast])
+
   const handleBulkAuthorise = useCallback(async () => {
     if (items.length === 0) return
     setLoading(true)
@@ -404,6 +493,15 @@ export function SmsReviewPage() {
                 <span>Authorise all ({pendingCount})</span>
               </Button>
             )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setImportModalOpen(true)}
+              disabled={loading || importing}
+            >
+              <History className="h-4 w-4" aria-hidden />
+              <span>Import SMS history</span>
+            </Button>
             {!isNative ? (
               <Button variant="secondary" size="sm" onClick={handleSimulateSms}>
                 <MessageSquare className="h-4 w-4" aria-hidden />
@@ -654,6 +752,61 @@ export function SmsReviewPage() {
             </Button>
             <Button size="sm" loading={loading} onClick={saveEdit} disabled={loading}>
               Save & confirm
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {importModalOpen && (
+        <Modal
+          open={importModalOpen}
+          onClose={() => !importing && setImportModalOpen(false)}
+          title="Import historical SMS transactions"
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--muted)]">
+              MoneyTrack securely scans your device SMS inbox for past bank debits, recharges, and UPI transactions.
+            </p>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-xs text-[var(--muted)] space-y-1.5">
+              <p className="font-semibold text-[var(--text)]">🔒 Privacy guarantee</p>
+              <p>• SMS processing runs 100% locally on your device.</p>
+              <p>• Personal chats and OTPs are ignored and never saved.</p>
+              <p>• Transactions are queued for review and only recorded when you authorise them.</p>
+            </div>
+            <Field label="Import time period">
+              <Select
+                value={String(importDays)}
+                onChange={(e) => setImportDays(Number(e.target.value))}
+                disabled={importing}
+              >
+                <option value="7">Past 7 days</option>
+                <option value="15">Past 15 days</option>
+                <option value="30">Past 30 days (Recommended)</option>
+                <option value="60">Past 60 days</option>
+                <option value="90">Past 90 days</option>
+                <option value="180">Past 180 days (6 months)</option>
+                <option value="0">All available messages</option>
+              </Select>
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t border-[var(--border)] mt-4">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setImportModalOpen(false)}
+              disabled={importing}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={importing}
+              onClick={() => void handleImportHistorical()}
+              disabled={importing}
+            >
+              Start import
             </Button>
           </div>
         </Modal>
