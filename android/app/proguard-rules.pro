@@ -1,21 +1,42 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# MoneyTrack Production ProGuard / R8 Rules
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Keep Line Numbers and Source File for production stack traces
+-keepattributes SourceFile,LineNumberTable,*Annotation*
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Capacitor Core and Plugins
+-keep public class * extends com.getcapacitor.Plugin {
+    public *;
+}
+-keep public class com.getcapacitor.** { *; }
+-keepclassmembers class * {
+    @com.getcapacitor.PluginMethod public *;
+}
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# MoneyTrack Native Plugins & Receivers
+-keep class com.moneytrack.app.plugins.** { *; }
+-keep class com.moneytrack.app.MainActivity { *; }
+-keep class com.moneytrack.app.sms.SmsReceiver { *; }
+
+# WorkManager Workers
+-keep class * extends androidx.work.ListenableWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}
+-keep class com.moneytrack.app.sms.SyncWorker { *; }
+-keep class com.moneytrack.app.sms.WeeklyReportWorker { *; }
+
+# Models, Entities & JSON reflection targets
+-keep class com.moneytrack.app.sms.TransactionRecord { *; }
+-keep class com.moneytrack.app.sms.ParsedTransaction { *; }
+-keep class com.moneytrack.app.sms.SmsSettings { *; }
+-keep class com.moneytrack.app.sms.CandidateStatus { *; }
+-keep class com.moneytrack.app.sms.TxnStatus { *; }
+-keep class com.moneytrack.app.sms.TxnClassification { *; }
+-keep class com.moneytrack.app.sms.EligibilityDecision { *; }
+
+# Android Security & Keystore
+-keep class androidx.security.crypto.** { *; }
+
+# OkHttp & Networking
+-dontwarn okhttp3.**
+-dontwarn okio.**

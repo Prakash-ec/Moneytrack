@@ -17,6 +17,7 @@ class IncomeBase(BaseModel):
     payment_method: str | None = Field(default=None, max_length=30)
     bank_reference: str | None = Field(default=None, max_length=100)
     reference: str | None = Field(default=None, max_length=100)
+    confidence: str | None = Field(default="HIGH", max_length=20)
 
 
 class IncomeCreate(IncomeBase):
@@ -34,6 +35,7 @@ class IncomeUpdate(BaseModel):
     payment_method: str | None = Field(default=None, max_length=30)
     bank_reference: str | None = Field(default=None, max_length=100)
     reference: str | None = Field(default=None, max_length=100)
+    confidence: str | None = Field(default="HIGH", max_length=20)
 
 
 class IncomeRead(IncomeBase):

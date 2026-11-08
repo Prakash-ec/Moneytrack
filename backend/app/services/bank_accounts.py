@@ -1,5 +1,6 @@
-from datetime import date, datetime, timezone
 import re
+from datetime import UTC, date, datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -88,7 +89,7 @@ def recalculate_account_balance(db: Session, account_id: int, commit: bool = Tru
         else:
             account.reconciliation_status = "discrepancy"
 
-    account.updated_at = datetime.now(timezone.utc)
+    account.updated_at = datetime.now(UTC)
     if commit:
         db.commit()
     return calculated
@@ -133,20 +134,41 @@ def find_account_by_identifier(
             ):
                 return acc
 
-    # 2. Match by last 4 digits in mask or account name
+    # 2. Match by last 4 digits in mask or account name (guard against multi-account collisions)
     if target_digits:
+        matching = []
         for acc in accounts:
             mask_4 = extract_4_digits(acc.account_number_mask)
             name_4 = extract_4_digits(acc.account_name)
             if target_digits in (mask_4, name_4):
-                return acc
+                matching.append(acc)
+        if len(matching) == 1:
+            return matching[0]
+        elif len(matching) > 1 and bank_name:
+            clean_bank = bank_name.lower().strip()
+            for acc in matching:
+                if (
+                    clean_bank in (acc.bank_name or "").lower()
+                    or clean_bank in (acc.account_name or "").lower()
+                ):
+                    return acc
+            # Suffix collision exists but none match bank name
+            return None
+        elif len(matching) > 1:
+            # Suffix collision exists and no bank name provided; cannot safely disambiguate
+            return None
 
     # 3. Match by bank name alone
     if bank_name:
         clean_bank = bank_name.lower().strip()
-        for acc in accounts:
-            if clean_bank in (acc.bank_name or "").lower():
-                return acc
+        matching_by_bank = [
+            acc
+            for acc in accounts
+            if clean_bank in (acc.bank_name or "").lower()
+            or (acc.bank_name and acc.bank_name.lower() in clean_bank)
+        ]
+        if len(matching_by_bank) == 1:
+            return matching_by_bank[0]
 
     return None
 
@@ -157,28 +179,91 @@ def record_reported_balance(
     reported_paise: int,
     source: str = "sms",
     user_id: int | None = None,
+    reported_at: datetime | None = None,
+    balance_type: str = "AVAILABLE",
+    sms_message_id: int | None = None,
+    transaction_time: datetime | None = None,
+    message_reception_time: datetime | None = None,
+    confidence: str = "HIGH",
+    source_evidence: str | None = None,
+    currency: str = "INR",
+    note: str | None = None,
 ) -> BankAccount | None:
     account = get_account(db, account_id, user_id=user_id)
     if not account:
         return None
 
-    account.last_reported_balance_paise = reported_paise
-    account.last_reported_at = datetime.now(timezone.utc)
+    report_time = transaction_time or message_reception_time or reported_at or datetime.now(UTC)
+    if report_time.tzinfo is None:
+        report_time = report_time.replace(tzinfo=UTC)
 
-    # Check reconciliation
-    recalculate_account_balance(db, account_id)
+    # Guard against out-of-order historical messages regressing the reported balance
+    is_out_of_order = False
+    if account.last_reported_at is not None:
+        last_rep = account.last_reported_at
+        if last_rep.tzinfo is None:
+            last_rep = last_rep.replace(tzinfo=UTC)
+        if report_time < last_rep:
+            is_out_of_order = True
+
+    if not is_out_of_order:
+        account.last_reported_balance_paise = reported_paise
+        account.last_reported_at = report_time
+
+    # Recalculate ledger balance
+    recalculate_account_balance(db, account_id, commit=False)
+
+    snapshot_note = note or (
+        f"Historical out-of-order balance snapshot via {source}"
+        if is_out_of_order
+        else f"Reported via {source}"
+    )
 
     # Save balance snapshot for audit
     snapshot = BalanceSnapshot(
         user_id=user_id or account.user_id,
         account_id=account_id,
-        snapshot_date=date.today(),
+        snapshot_date=report_time.date() if isinstance(report_time, datetime) else date.today(),
         calculated_balance_paise=account.current_balance_paise,
         reported_balance_paise=reported_paise,
+        currency=currency,
+        balance_type=balance_type.upper(),
+        sms_message_id=sms_message_id,
+        transaction_time=transaction_time,
+        message_reception_time=message_reception_time,
+        processing_time=datetime.now(UTC),
+        confidence=confidence,
+        source_evidence=source_evidence,
         source=source,
-        note=f"Reported via {source}",
+        note=snapshot_note,
     )
     db.add(snapshot)
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+def reconcile_account_to_reported(
+    db: Session,
+    account_id: int,
+    user_id: int | None = None,
+) -> BankAccount:
+    """Evaluates reconciliation status between calculated ledger and bank report.
+    Never silently modifies opening_balance_paise; preserves ledger audit integrity.
+    """
+    account = get_account(db, account_id, user_id=user_id)
+    if not account:
+        raise ValueError("Bank account not found")
+    if account.last_reported_balance_paise is None:
+        raise ValueError("No reported bank balance available for reconciliation")
+
+    calculated = recalculate_account_balance(db, account_id, commit=False)
+    diff = calculated - account.last_reported_balance_paise
+    if diff == 0:
+        account.reconciliation_status = "matched"
+    else:
+        account.reconciliation_status = "discrepancy"
+
     db.commit()
     db.refresh(account)
     return account
@@ -204,9 +289,7 @@ def list_accounts(
         if not acc.is_archived and acc.last_reported_balance_paise is not None
     )
     discrepancy_count = sum(
-        1
-        for acc in items
-        if not acc.is_archived and acc.reconciliation_status == "discrepancy"
+        1 for acc in items if not acc.is_archived and acc.reconciliation_status == "discrepancy"
     )
 
     return BankAccountList(
@@ -260,7 +343,7 @@ def update_account(
         if field in valid_cols:
             setattr(account, field, val)
 
-    account.updated_at = datetime.now(timezone.utc)
+    account.updated_at = datetime.now(UTC)
     db.commit()
     recalculate_account_balance(db, account.id)
     db.refresh(account)
@@ -272,7 +355,7 @@ def delete_account(db: Session, account_id: int, user_id: int | None = None) -> 
     if not account:
         return False
     account.is_archived = True
-    account.updated_at = datetime.now(timezone.utc)
+    account.updated_at = datetime.now(UTC)
     db.commit()
     return True
 

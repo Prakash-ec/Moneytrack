@@ -62,6 +62,10 @@ export function CashflowHeroCard({
 
   const netCashflowPaise = incomeTotalPaise - totalPaise
   const isNetPositive = netCashflowPaise >= 0
+  const displayBalance =
+    totalBankBalancePaise > 0
+      ? totalBankBalancePaise
+      : (reportedBankBalancePaise ?? totalBankBalancePaise)
 
   return (
     <div className="card p-5 sm:p-6 flex flex-col justify-between border border-border shadow-xs">
@@ -105,9 +109,9 @@ export function CashflowHeroCard({
         </div>
 
         {/* Hero Amount */}
-        <div className="flex items-baseline justify-between mb-4 gap-2 min-w-0">
+        <div className="flex items-baseline justify-between mb-1 gap-2 min-w-0">
           <div className="font-display tabular-nums text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-text truncate">
-            {showBalance ? formatINR(totalBankBalancePaise) : '••••••••'}
+            {showBalance ? formatINR(displayBalance) : '••••••••'}
           </div>
           {linkedAccountsCount > 0 && onManageAccounts ? (
             <button
@@ -119,6 +123,15 @@ export function CashflowHeroCard({
             </button>
           ) : null}
         </div>
+
+        {!reconciled && reportedBankBalancePaise != null && showBalance ? (
+          <div className="text-[11px] text-muted font-medium mb-3 flex items-center gap-1.5">
+            <span>Verified bank balance:</span>
+            <span className="font-mono text-sky-400 font-semibold">{formatINR(reportedBankBalancePaise)}</span>
+          </div>
+        ) : (
+          <div className="mb-3" />
+        )}
 
         {/* Cashflow Summary Micro-Grid */}
         <div className="flex items-center justify-between text-[11px] text-muted mb-2">

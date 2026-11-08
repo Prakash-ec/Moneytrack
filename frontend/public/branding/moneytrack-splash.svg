@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1200" width="800" height="1200" fill="none" aria-label="MoneyTrack Splash Screen">
+  <defs>
+    <radialGradient id="splashBg" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#161B26" />
+      <stop offset="50%" stop-color="#0E131F" />
+      <stop offset="100%" stop-color="#0B0F19" />
+    </radialGradient>
+
+    <radialGradient id="splashAmbientGlow" cx="50%" cy="42%" r="40%">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.28" />
+      <stop offset="60%" stop-color="#3B82F6" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#0B0F19" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Squircle Gradients -->
+    <linearGradient id="spSqBg" x1="0" y1="0" x2="220" y2="220" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1C2333" />
+      <stop offset="100%" stop-color="#0F1420" />
+    </linearGradient>
+
+    <linearGradient id="spSqBorder" x1="0" y1="0" x2="220" y2="220" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#232B3B" stop-opacity="0.8" />
+    </linearGradient>
+
+    <!-- Symbol Gradients -->
+    <linearGradient id="spLeftRibbon" x1="50" y1="160" x2="110" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#818CF8" />
+    </linearGradient>
+
+    <linearGradient id="spGrowthRibbon" x1="90" y1="120" x2="180" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="50%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+
+    <linearGradient id="spOrbitGrad" x1="40" y1="180" x2="180" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.2" />
+      <stop offset="50%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+
+    <linearGradient id="spTextTrack" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#818CF8" />
+    </linearGradient>
+
+    <filter id="splashDropShadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+  </defs>
+
+  <!-- Deep Obsidian Canvas -->
+  <rect width="800" height="1200" fill="url(#splashBg)" />
+  
+  <!-- Subtle Ambient Glow in center -->
+  <circle cx="400" cy="500" r="380" fill="url(#splashAmbientGlow)" />
+
+  <!-- Centered Branding Lockup -->
+  <g transform="translate(290, 380)" filter="url(#splashDropShadow)">
+    <!-- 220x220 Squircle Icon -->
+    <rect width="220" height="220" rx="52" fill="url(#spSqBg)" stroke="url(#spSqBorder)" stroke-width="2.5" />
+    
+    <!-- Tracking Orbit -->
+    <path
+      d="M 58 162 A 76 76 0 1 1 170 154"
+      stroke="url(#spOrbitGrad)"
+      stroke-width="6.5"
+      stroke-linecap="round"
+      opacity="0.9"
+    />
+    <circle cx="170" cy="154" r="5" fill="#10B981" />
+
+    <!-- M Symbol -->
+    <!-- Left Pillar -->
+    <path
+      d="M 68 152 V 90 C 68 79 77 70 88 70 C 94.5 70 100 73 104 78 L 114 91 L 99 110 L 89 95 C 86.5 91.5 81.5 93 81.5 97 V 152 Z"
+      fill="url(#spLeftRibbon)"
+    />
+
+    <!-- Right Growth Vector Arrow -->
+    <path
+      d="M 104 103 L 114 91 L 124 103 L 146 74 C 150 69 156 66 163 66 L 186 51 V 86 L 148 86 L 165 77 C 160 74 154 75 150 80 L 123 115 V 152 H 110 V 119 Z"
+      fill="url(#spGrowthRibbon)"
+    />
+
+    <!-- Core Sensor -->
+    <circle cx="110" cy="105" r="6" fill="#38BDF8" />
+    <circle cx="110" cy="105" r="2.5" fill="#FFFFFF" />
+  </g>
+
+  <!-- Typography below the Icon -->
+  <g transform="translate(400, 680)">
+    <text text-anchor="middle" font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" font-weight="700" font-size="44" letter-spacing="-0.03em" fill="#F8FAFC">
+      Money<tspan fill="#6366F1">Track</tspan>
+    </text>
+    
+    <text y="42" text-anchor="middle" font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" font-weight="500" font-size="14" letter-spacing="0.28em" fill="#94A3B8" opacity="0.85">
+      YOUR MONEY. YOUR CONTROL.
+    </text>
+  </g>
+
+  <!-- Bottom Security Badge -->
+  <g transform="translate(400, 1110)" opacity="0.6">
+    <text text-anchor="middle" font-family="'Inter', -apple-system, sans-serif" font-weight="500" font-size="11" letter-spacing="0.12em" fill="#64748B">
+      PRIVATE &amp; ENCRYPTED FINANCIAL LEDGER
+    </text>
+  </g>
+</svg>

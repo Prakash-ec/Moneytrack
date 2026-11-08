@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from app.schemas.bank_account import BankAccountRead
 from app.schemas.expense import ExpenseRead
@@ -21,6 +21,23 @@ class CashFlowSummary(BaseModel):
     recent_incomes: list[IncomeRead]
     recent_expenses: list[ExpenseRead]
     accounts: list[BankAccountRead]
+
+    @computed_field
+    @property
+    def consolidated_balance_paise(self) -> int:
+        return self.total_bank_balance_paise
+
+    @computed_field
+    @property
+    def bank_accounts(self) -> list[BankAccountRead]:
+        return self.accounts
+
+    @computed_field
+    @property
+    def reconciliation_difference_paise(self) -> int:
+        if self.total_reported_balance_paise is None:
+            return 0
+        return abs(self.total_bank_balance_paise - self.total_reported_balance_paise)
 
 
 class BalanceSnapshotRead(BaseModel):

@@ -222,6 +222,42 @@ def test_sms_ingest_credit_and_debit(client: TestClient, make_income_type, make_
     assert data_d["current_calculated_balance_paise"] == 550000
 
 
+def test_sms_ingest_auto_creates_bank_account_and_records_balance(client: TestClient, make_type):
+    make_type(name="Food", category="Food")
+
+    # Ingest without pre-creating account XX4375
+    res = client.post(
+        "/api/sms/ingest",
+        json={
+            "body": "Your Account XXX924375 is debited by Rs. 15 Total Balance : Rs. 12,118.09 Clear Balance : Rs. 12,118.0907/11/2026",
+            "sender": "AD-SDCCBL-S",
+            "amount_paise": 1500,
+            "merchant_or_payer": "Salem District Central Co-operative Bank",
+            "reference": "631165217684",
+            "transaction_date": "2026-11-07",
+            "direction": "DEBIT",
+            "available_balance_paise": 1211809,
+            "account_suffix": "4375",
+            "bank_name": "Salem District Central Co-operative Bank",
+            "suggested_category": "Food",
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["created"] is True
+    assert data["available_balance_recorded"] is True
+    assert data["account_id"] is not None
+
+    # Verify account exists in list
+    acc_res = client.get("/api/bank-accounts")
+    assert acc_res.status_code == 200
+    acc_list = acc_res.json()
+    created_acc = next(a for a in acc_list["items"] if a["id"] == data["account_id"])
+    assert "4375" in created_acc["account_number_mask"] or "4375" in created_acc["account_name"]
+    assert created_acc["last_reported_balance_paise"] == 1211809
+
+
+
 def test_cashflow_summary_endpoint(client: TestClient):
     res = client.get("/api/analytics/cashflow")
     assert res.status_code == 200

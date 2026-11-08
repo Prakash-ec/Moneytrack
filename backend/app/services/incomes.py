@@ -149,10 +149,27 @@ def create_income(
         else None,
         bank_reference=ref.strip() if ref else None,
         source=payload.source,
+        confidence=payload.confidence or "HIGH",
         idempotency_key=effective_key,
     )
     db.add(income)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if effective_key:
+            stmt = (
+                select(Income)
+                .options(joinedload(Income.income_type), joinedload(Income.bank_account))
+                .where(Income.idempotency_key == effective_key)
+            )
+            if user_id is not None:
+                stmt = stmt.where(Income.user_id == user_id)
+            existing = db.scalar(stmt)
+            if existing:
+                return existing, True
+        raise
+
     db.refresh(income)
 
     if income.account_id:

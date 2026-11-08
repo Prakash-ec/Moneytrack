@@ -10,7 +10,7 @@ import {
 import { cn } from '@/utils/cn'
 
 const controlBase =
-  'w-full rounded-lg border border-line bg-surface text-sm text-ink outline-none transition-colors placeholder:text-subtle focus:border-primary focus:ring-1 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50'
+  'w-full rounded-lg border border-line bg-surface text-base sm:text-sm text-ink outline-none transition-colors placeholder:text-subtle focus:border-primary focus:ring-1 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50'
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...props }, ref) {

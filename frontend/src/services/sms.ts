@@ -15,6 +15,12 @@ export interface PendingTransaction {
   error: string
   retryCount: number
   notified: boolean
+  availableBalance?: string | null
+  availableBalancePaise?: number | null
+  bankName?: string | null
+  accountSuffix?: string | null
+  direction?: string | null
+  classification?: string | null
 }
 
 export interface SmsSettings {
@@ -52,6 +58,12 @@ interface SmsPluginWeb {
     type?: string | null
   }): Promise<void>
   syncNow(): Promise<void>
+  importHistoricalSms(options: { days: number }): Promise<{
+    totalScanned: number
+    eligibleFound: number
+    duplicatesSkipped: number
+    newImported: number
+  }>
   getLaunchUrl(): Promise<{ url: string | null }>
   setAuthToken?(options: { token: string }): Promise<void>
   clearAuthToken?(): Promise<void>
@@ -137,6 +149,14 @@ const SmsPlugin = registerPlugin<SmsPluginWeb>('SmsPlugin', {
         }
         async syncNow(): Promise<void> {
           return
+        }
+        async importHistoricalSms(): Promise<{
+          totalScanned: number
+          eligibleFound: number
+          duplicatesSkipped: number
+          newImported: number
+        }> {
+          return { totalScanned: 0, eligibleFound: 0, duplicatesSkipped: 0, newImported: 0 }
         }
         async getLaunchUrl(): Promise<{ url: string | null }> {
           return { url: null }
