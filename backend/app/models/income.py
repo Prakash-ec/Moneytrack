@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, CheckConstraint, Date, ForeignKey, Index, Integer, String
+from sqlalchemy import BigInteger, CheckConstraint, Date, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utc_now
@@ -10,12 +10,14 @@ from app.db.base import Base, UTCDateTime
 if TYPE_CHECKING:
     from app.models.bank_account import BankAccount
     from app.models.income_type import IncomeType
+    from app.models.transaction_evidence import TransactionEvidence
 
 
 class Income(Base):
     __tablename__ = "incomes"
     __table_args__ = (
         CheckConstraint("amount_paise > 0", name="ck_incomes_amount_positive"),
+        UniqueConstraint("user_id", "id", name="uq_incomes_user_id"),
         Index("ix_incomes_date_id", "income_date", "id"),
         Index("ix_incomes_type_date", "income_type_id", "income_date"),
         Index("ix_incomes_account_date", "account_id", "income_date"),
@@ -40,6 +42,7 @@ class Income(Base):
     )  # upi, neft, imps, rtgs, cash, bank_transfer, other
     bank_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")  # manual, sms
+    confidence: Mapped[str | None] = mapped_column(String(20), nullable=True, default="HIGH")
     idempotency_key: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
@@ -51,4 +54,10 @@ class Income(Base):
     income_type: Mapped["IncomeType"] = relationship(back_populates="incomes")
     bank_account: Mapped["BankAccount | None"] = relationship(
         "BankAccount", back_populates="incomes", foreign_keys=[account_id]
+    )
+    sms_evidence: Mapped[list["TransactionEvidence"]] = relationship(
+        "TransactionEvidence",
+        back_populates="income",
+        cascade="all, delete-orphan",
+        foreign_keys="[TransactionEvidence.income_id]",
     )

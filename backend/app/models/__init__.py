@@ -11,6 +11,9 @@ from app.models.idempotency_key import ExpenseIdempotencyKey
 from app.models.security_alert import SecurityAlert
 from app.models.notification_log import NotificationLog
 from app.models.user_preference import UserPreference
+from app.models.sms_source_message import SmsSourceMessage
+from app.models.transaction_evidence import TransactionEvidence
+from app.models.transaction_reversal import TransactionReversal
 
 __all__ = [
     "User",
@@ -27,4 +30,7 @@ __all__ = [
     "SecurityAlert",
     "NotificationLog",
     "UserPreference",
+    "SmsSourceMessage",
+    "TransactionEvidence",
+    "TransactionReversal",
 ]
