@@ -176,6 +176,9 @@ def create_expense(
         note=payload.note,
         payment_method=payload.payment_method.value if payload.payment_method else None,
         merchant=payload.merchant,
+        bank_reference=payload.bank_reference,
+        source=payload.source or "manual",
+        confidence=payload.confidence or "HIGH",
     )
     db.add(model)
     try:

@@ -316,4 +316,156 @@ Transaction ID : BR000D0ABTKT
         assertEquals("2026-10-28", parsed.transactionDate)
         assertEquals("Salem District Central Co-operative Bank", parsed.bankName)
     }
+
+    @Test
+    fun `ignores English 1_50 GB daily data quota exhausted alert`() {
+        val body = """
+            ALERT!
+            You have exhausted 100% of daily data quota of 1.50 GB as of 07-Nov-26 10:05.
+            Jio Number: 9363194036
+            High speed data will be restored on 08-Nov-26 01:30.
+            You can also recharge with a 4G data pack: http://tiny.jio.com/15Nov4G
+        """.trimIndent()
+        val parsed = SmsParser.parse(body, "JT-JIOPAY-S", 1794034071907L)
+
+        assertNull("Amount must be null for data quota", parsed.amountPaise)
+        assertEquals(TxnStatus.UNKNOWN, parsed.status)
+        assertEquals(FinancialTxnType.NON_FINANCIAL_SMS, parsed.classification)
+    }
+
+    @Test
+    fun `ignores English 19_21 MB data balance alert`() {
+        val body = """
+            You have used 19.21 MB from your data balance of your Jio Number 9363194036.
+            Remaining data: 80.79 MB. High speed data will be restored on 07-Nov-26 01:30.
+        """.trimIndent()
+        val parsed = SmsParser.parse(body, "JT-JioPay-S", 1794056243353L)
+
+        assertNull("Amount must be null for MB data usage", parsed.amountPaise)
+        assertEquals(TxnStatus.UNKNOWN, parsed.status)
+        assertEquals(FinancialTxnType.NON_FINANCIAL_SMS, parsed.classification)
+    }
+
+    @Test
+    fun `ignores English 97_44 MB data usage alert`() {
+        val body = """
+            ATTENTION!
+            You have used 97.44 MB of available data as of 07-Nov-26 19:10.
+            Jio Number: 9363194036
+            Plan: MRP 15
+            Total Data Quota: 200 MB
+            Remaining Data: 15.81 MB
+        """.trimIndent()
+        val parsed = SmsParser.parse(body, "JT-JioPay-S", 1794058856930L)
+
+        assertNull("Amount must be null for 97.44 MB data alert", parsed.amountPaise)
+        assertEquals(TxnStatus.UNKNOWN, parsed.status)
+        assertEquals(FinancialTxnType.NON_FINANCIAL_SMS, parsed.classification)
+    }
+
+    @Test
+    fun `ignores Tamil data usage alert`() {
+        val body = """
+            டேட்டா பயன்பாட்டு எச்சரிக்கை!
+            நீங்கள் 07-Nov-26 18:25 வரை கிடைக்கும் டேட்டாவில் 50% பயன்படுத்தியுள்ளீர்கள்.
+            அதிவேக இணையத்தை தொடர்ந்து பயன்படுத்த ரீசார்ஜ் செய்ய கிளிக் செய்யவும்: http://tiny.jio.com/15Nov4G
+        """.trimIndent()
+        val parsed = SmsParser.parse(body, "JT-JioPay-S", 1794056128675L)
+
+        assertNull("Amount must be null for Tamil data alert", parsed.amountPaise)
+        assertEquals(TxnStatus.UNKNOWN, parsed.status)
+        assertEquals(FinancialTxnType.NON_FINANCIAL_SMS, parsed.classification)
+    }
+
+    @Test
+    fun `ignores promotional coupon with Audible for Rs 5 from TRAI P sender`() {
+        val body = """
+            Dear User,
+            You’ve earned 3 months of Audible Premium Plus for ₹5 (CC: 4ZNDXBFXPQ) on JioRecharge. Claim now: https://t.jio/JIOCPN/SGtpWv T&C*
+            JioCoupons
+        """.trimIndent()
+        val parsed = SmsParser.parse(body, "JD-JIOCPN-P", 1794046373128L)
+
+        assertNull("Amount must be null for promo coupon", parsed.amountPaise)
+        assertEquals(TxnStatus.UNKNOWN, parsed.status)
+        assertEquals(FinancialTxnType.PROMOTIONAL_SMS, parsed.classification)
+    }
+
+    @Test
+    fun `ignores promotional recharge offer of Rs 299 from TRAI P sender`() {
+        val body = "Dear User, Recharge with ₹299 to get unlimited 5G data and free subscriptions. Click now: https://t.jio"
+        val parsed = SmsParser.parse(body, "JD-JIOCPN-P", 1794046373128L)
+
+        assertNull("Amount must be null for promo recharge", parsed.amountPaise)
+        assertEquals(TxnStatus.UNKNOWN, parsed.status)
+        assertEquals(FinancialTxnType.PROMOTIONAL_SMS, parsed.classification)
+    }
+
+    @Test
+    fun `extracts CBS ledger debit Rs 15 without setting masked account as reference`() {
+        val body = "Your Account XXX924375 is debited by Rs. 15 Total Balance : Rs. 12,118.09  Clear Balance : Rs. 12,118.0907/11/2026:14:47"
+        val parsed = SmsParser.parse(body, "AD-SDCCBL-S", 1794043089744L)
+
+        assertEquals(1500L, parsed.amountPaise)
+        assertEquals(TxnStatus.DEBIT, parsed.status)
+        assertEquals(FinancialTxnType.BANK_DEBIT, parsed.classification)
+        assertEquals("4375", parsed.accountSuffix)
+        assertNull("Masked account XXX924375 must NOT be extracted as reference", parsed.reference)
+        assertEquals(1211809L, parsed.availableBalancePaise)
+        assertEquals("2026-11-07", parsed.transactionDate)
+    }
+
+    @Test
+    fun `extracts UPI debit Rs 15 with 12-digit UPI reference`() {
+        val body = "Your a/c no. XXXXXXXX4375 is debited for Rs.15.00 on 07-11-26 and credited to a/c no. XXXXXXXX3360 (UPI Ref no 631165217684) - SDCCB"
+        val parsed = SmsParser.parse(body, "JX-SDCCBL-S", 1794043054213L)
+
+        assertEquals(1500L, parsed.amountPaise)
+        assertEquals(TxnStatus.DEBIT, parsed.status)
+        assertEquals(FinancialTxnType.UPI_DEBIT, parsed.classification)
+        assertEquals("631165217684", parsed.reference)
+        assertEquals("4375", parsed.accountSuffix)
+        assertEquals("2026-11-07", parsed.transactionDate)
+    }
+
+    @Test
+    fun `parses JioPay recharge confirmation with transaction id`() {
+        val body = """
+            Recharge Successful !
+            Plan Name : 15.0
+            Jio Number : 9363194036
+            Entitlement : 
+            Benefits: 
+            1.Data: Unlimited 5G data, 200MB 4G Data
+            Validity: 1 Day
+            Transaction ID : 10005862230440
+            View plan details - http://tiny.jio.com/dmyjioplans
+        """.trimIndent()
+        val parsed = SmsParser.parse(body, "JZ-JioPay-S", 1794043062507L)
+
+        assertEquals(1500L, parsed.amountPaise)
+        assertEquals(TxnStatus.DEBIT, parsed.status)
+        assertEquals(FinancialTxnType.RECHARGE, parsed.classification)
+        assertEquals("10005862230440", parsed.reference)
+        assertEquals("Mobile Recharge", parsed.categorySuggestion)
+        assertEquals("Jio", parsed.merchant)
+    }
+
+    @Test
+    fun `parses Tamil recharge confirmation`() {
+        val body = """
+            வெற்றிகரமாக ரீசார்ஜ் செய்யப்பட்டது! 
+            திட்டத்தின் பெயர் : 15.0 
+            Jio எண் : 9363194036
+            பலன்கள் : 
+            1.Data: Unlimited 5G data, 200MB 4G Data
+            செல்லுபடியாகும் காலம்: 1 Day
+        """.trimIndent()
+        val parsed = SmsParser.parse(body, "JD-JioPay-S", 1794043170105L)
+
+        assertEquals(1500L, parsed.amountPaise)
+        assertEquals(TxnStatus.DEBIT, parsed.status)
+        assertEquals(FinancialTxnType.RECHARGE, parsed.classification)
+        assertEquals("Mobile Recharge", parsed.categorySuggestion)
+    }
 }

@@ -24,15 +24,38 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
+    signingConfigs {
+        release {
+            if (project.hasProperty('RELEASE_STORE_FILE') && file(project.property('RELEASE_STORE_FILE')).exists()) {
+                storeFile file(project.property('RELEASE_STORE_FILE'))
+                storePassword project.property('RELEASE_STORE_PASSWORD')
+                keyAlias project.property('RELEASE_KEY_ALIAS')
+                keyPassword project.property('RELEASE_KEY_PASSWORD')
+            } else if (System.getenv('RELEASE_STORE_FILE') != null && file(System.getenv('RELEASE_STORE_FILE')).exists()) {
+                storeFile file(System.getenv('RELEASE_STORE_FILE'))
+                storePassword System.getenv('RELEASE_STORE_PASSWORD')
+                keyAlias System.getenv('RELEASE_KEY_ALIAS')
+                keyPassword System.getenv('RELEASE_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            if ((project.hasProperty('RELEASE_STORE_FILE') && file(project.property('RELEASE_STORE_FILE')).exists()) ||
+                (System.getenv('RELEASE_STORE_FILE') != null && file(System.getenv('RELEASE_STORE_FILE')).exists())) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
     buildFeatures {
         buildConfig = true
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
     }
 }
 
@@ -51,6 +74,8 @@ dependencies {
     implementation "androidx.work:work-runtime-ktx:$workVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
+    testImplementation 'org.json:json:20240303'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

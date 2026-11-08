@@ -1,15 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MoneyTrack">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="MoneyTrack Favicon">
   <defs>
-    <linearGradient id="bg" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0B4F46"/>
-      <stop offset="1" stop-color="#12A187"/>
+    <linearGradient id="favBg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#161B26" />
+      <stop offset="100%" stop-color="#0B0F19" />
+    </linearGradient>
+    <linearGradient id="favLeft" x1="16" y1="48" x2="32" y2="18" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#818CF8" />
+    </linearGradient>
+    <linearGradient id="favRight" x1="30" y1="36" x2="52" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="50%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+    <linearGradient id="favOrbit" x1="12" y1="52" x2="54" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.3" />
+      <stop offset="60%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#10B981" />
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
-  <path d="M17 24.5c0-2.5 2-4.5 4.5-4.5h20c2.5 0 4.5 2 4.5 4.5v4H17v-4Z" fill="#fff" opacity=".92"/>
-  <rect x="17" y="27.5" width="30" height="18" rx="5.5" fill="#fff"/>
-  <path d="M47 32.5v8" stroke="#0B4F46" stroke-width="2.4" stroke-linecap="round" opacity=".22"/>
-  <circle cx="40" cy="36.5" r="4.8" fill="#0D7C66"/>
-  <circle cx="40" cy="36.5" r="1.7" fill="#fff"/>
-  <path d="M23 36.5h7" stroke="#0B4F46" stroke-width="2.4" stroke-linecap="round" opacity=".24"/>
+
+  <!-- Container -->
+  <rect width="64" height="64" rx="16" fill="url(#favBg)" />
+  <rect width="64" height="64" rx="16" stroke="#232B3B" stroke-width="1.5" />
+
+  <!-- Orbit Tracking Ring -->
+  <path
+    d="M 16 48 A 23 23 0 1 1 50 45"
+    stroke="url(#favOrbit)"
+    stroke-width="2.5"
+    stroke-linecap="round"
+  />
+  <circle cx="50" cy="45" r="1.8" fill="#10B981" />
+
+  <!-- M Architecture -->
+  <!-- Left Pillar -->
+  <path
+    d="M 19 46 V 26 C 19 22.5 21.8 20 25 20 C 27 20 28.8 21 29.8 22.5 L 32 25.5 L 29 29.5 L 25.5 25 C 24.8 24 23.5 24.5 23.5 25.5 V 46 Z"
+    fill="url(#favLeft)"
+  />
+
+  <!-- Right Growth Vector Arrow -->
+  <path
+    d="M 29.5 29.5 L 32 25.5 L 34.5 29.5 L 41 21 C 42.2 19.5 44 18.5 46 18.5 L 53 13 V 24 L 43 24 L 47.5 21.5 C 46 20.8 44.5 21 43.5 22 L 35 32 V 46 H 31.5 V 34 Z"
+    fill="url(#favRight)"
+  />
+
+  <!-- Fulcrum -->
+  <circle cx="32" cy="30.5" r="2.2" fill="#38BDF8" />
+  <circle cx="32" cy="30.5" r="1" fill="#FFFFFF" />
 </svg>

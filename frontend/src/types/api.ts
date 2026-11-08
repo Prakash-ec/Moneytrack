@@ -332,9 +332,11 @@ export type BankAccountUpdateInput = Partial<BankAccountCreateInput> & { is_arch
 
 export interface BankAccountList {
   items: BankAccount[]
-  total_accounts: number
-  consolidated_balance_paise: number
-  total_reported_balance_paise: number
+  total_accounts?: number
+  account_count?: number
+  consolidated_balance_paise?: number
+  total_balance_paise?: number
+  total_reported_balance_paise?: number
 }
 
 export interface IncomeType {
@@ -429,10 +431,14 @@ export interface CashFlowSummary {
   total_expense_paise: number
   net_cashflow_paise: number
   savings_rate_percent: number
-  consolidated_balance_paise: number
-  total_reported_balance_paise: number
-  reconciliation_difference_paise: number
-  bank_accounts: BankAccount[]
+  consolidated_balance_paise?: number
+  total_bank_balance_paise?: number
+  total_reported_balance_paise?: number | null
+  reconciliation_difference_paise?: number
+  bank_accounts?: BankAccount[]
+  accounts?: BankAccount[]
+  account_count?: number
+  reconciliation_discrepancy_count?: number
 }
 
 export interface AccountReconciliation {

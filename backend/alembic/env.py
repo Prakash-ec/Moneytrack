@@ -40,13 +40,14 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    url = config.get_main_option("sqlalchemy.url") or str(settings.database_url)
+    is_sqlite = "sqlite" in url
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"check_same_thread": False}
-        if settings.is_sqlite
-        else {},
+        connect_args={"check_same_thread": False} if is_sqlite else {},
     )
 
     with connectable.connect() as connection:
@@ -54,7 +55,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
-            render_as_batch=settings.is_sqlite,
+            render_as_batch=is_sqlite,
         )
 
         with context.begin_transaction():

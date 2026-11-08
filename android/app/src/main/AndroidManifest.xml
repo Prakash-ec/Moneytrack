@@ -28,12 +28,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deep link for transaction review notifications: com.moneytrack.app://review?id=... -->
+            <!-- Deep links for app routing: review, security, report, notifications -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="com.moneytrack.app" android:host="review" />
+                <data android:scheme="com.moneytrack.app" android:host="security" />
+                <data android:scheme="com.moneytrack.app" android:host="report" />
+                <data android:scheme="com.moneytrack.app" android:host="notifications" />
             </intent-filter>
 
         </activity>

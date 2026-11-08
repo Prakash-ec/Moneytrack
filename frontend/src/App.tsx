@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
-import { BrowserRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ExpenseDialogProvider } from '@/components/ExpenseDialogProvider'
@@ -12,7 +12,13 @@ import { RefreshProvider } from '@/providers/RefreshProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 import { ToastProvider } from '@/providers/ToastProvider'
 import { LoginPage } from '@/pages/LoginPage'
+import { WELCOME_STORAGE_KEY } from '@/constants/branding'
 import { addSmsReviewListener, getSmsLaunchUrl } from '@/services/sms'
+import { useAndroidBackButton } from '@/hooks/useAndroidBackButton'
+
+const WelcomePage = lazy(() =>
+  import('@/pages/WelcomePage').then((module) => ({ default: module.WelcomePage })),
+)
 
 const HomePage = lazy(() =>
   import('@/pages/HomePage').then((module) => ({ default: module.HomePage })),
@@ -103,12 +109,26 @@ function DeepLinkHandler() {
   return null
 }
 
+function AndroidBackButtonHandler() {
+  useAndroidBackButton()
+  return null
+}
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
   if (isLoading) {
     return <PageSkeleton />
   }
   if (!isAuthenticated) {
+    let hasWelcomed = false
+    try {
+      hasWelcomed = Boolean(localStorage.getItem(WELCOME_STORAGE_KEY))
+    } catch {
+      hasWelcomed = false
+    }
+    if (!hasWelcomed) {
+      return <Navigate to="/welcome" replace />
+    }
     return <LoginPage />
   }
   return <>{children}</>
@@ -124,9 +144,19 @@ export default function App() {
               <BrowserRouter>
                 <ScrollToTop />
                 <DeepLinkHandler />
+                <AndroidBackButtonHandler />
                 <ExpenseDialogProvider>
                   <Routes>
+                    <Route
+                      path="/welcome"
+                      element={
+                        <Page>
+                          <WelcomePage />
+                        </Page>
+                      }
+                    />
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<LoginPage initialMode="register" />} />
                     <Route
                       element={
                         <ProtectedRoute>

@@ -23,6 +23,7 @@ import com.moneytrack.app.sms.Fingerprint
 import com.moneytrack.app.sms.SmsEligibility
 import com.moneytrack.app.sms.SmsNotificationHelper
 import com.moneytrack.app.sms.SmsParser
+import com.moneytrack.app.sms.SmsReconciliation
 import com.moneytrack.app.sms.SyncWorker
 import com.moneytrack.app.sms.TransactionRecord
 import com.moneytrack.app.sms.TransactionStore
@@ -169,6 +170,12 @@ class SmsPlugin : Plugin() {
         val record = store.loadQueue().find { it.id == id } ?: run { call.reject("not found"); return }
         val updated = record.copy(status = CandidateStatus.READY_TO_SYNC)
         store.upsert(updated)
+        // Dismiss only the notification for this specific transaction from the Android drawer
+        if (record.notificationId != null) {
+            SmsNotificationHelper.cancelReviewNotificationById(ctx, record.notificationId!!)
+        } else {
+            SmsNotificationHelper.cancelReviewNotification(ctx, id)
+        }
         enqueueSync(ctx)
         call.resolve(recordToJson(updated))
     }
@@ -181,6 +188,12 @@ class SmsPlugin : Plugin() {
         val record = store.loadQueue().find { it.id == id } ?: run { call.reject("not found"); return }
         val updated = record.copy(status = CandidateStatus.IGNORED, reason = "Rejected by user")
         store.upsert(updated)
+        // Dismiss only the notification for this specific transaction from the Android drawer
+        if (record.notificationId != null) {
+            SmsNotificationHelper.cancelReviewNotificationById(ctx, record.notificationId!!)
+        } else {
+            SmsNotificationHelper.cancelReviewNotification(ctx, id)
+        }
         call.resolve(recordToJson(updated))
     }
 
@@ -189,8 +202,14 @@ class SmsPlugin : Plugin() {
         val id = call.getString("id") ?: run { call.reject("id required"); return }
         val ctx = context
         val store = TransactionStore(ctx)
+        val record = store.loadQueue().find { it.id == id }
         store.remove(id)
-        SmsNotificationHelper.cancelAll(ctx)
+        // Dismiss only this individual notification, preserving all other notifications
+        if (record?.notificationId != null) {
+            SmsNotificationHelper.cancelReviewNotificationById(ctx, record.notificationId!!)
+        } else {
+            SmsNotificationHelper.cancelReviewNotification(ctx, id)
+        }
         call.resolve(JSObject().apply { put("id", id) })
     }
 
@@ -199,7 +218,8 @@ class SmsPlugin : Plugin() {
         val ctx = context
         val store = TransactionStore(ctx)
         store.saveQueue(emptyList())
-        SmsNotificationHelper.cancelAll(ctx)
+        // Clear all review notifications only, preserving security alerts and weekly reports
+        SmsNotificationHelper.cancelAllReviewNotifications(ctx)
         val result = JSObject()
         result.put("cleared", true)
         call.resolve(result)
@@ -309,7 +329,37 @@ class SmsPlugin : Plugin() {
                     }
 
                     eligibleFound++
-                    val id = Fingerprint.of(address, dateMs, parsed.amountPaise, parsed.reference, parsed.transactionDate)
+                    val id = Fingerprint.of(
+                        sender = address,
+                        timestampMs = dateMs,
+                        amountPaise = parsed.amountPaise,
+                        reference = parsed.reference,
+                        transactionDate = parsed.transactionDate,
+                        accountSuffix = parsed.accountSuffix,
+                        bankName = parsed.bankName,
+                        balancePaise = parsed.availableBalancePaise,
+                    )
+
+                    val candidate = TransactionRecord(
+                        id = id,
+                        status = decision.status,
+                        parsed = parsed,
+                        reason = decision.reason ?: "Imported from historical SMS",
+                        createdAtMs = dateMs,
+                        notified = false
+                    )
+
+                    val outcome = SmsReconciliation.reconcile(candidate, existingQueue + newRecords)
+                    if (outcome.isExactDuplicate) {
+                        duplicatesSkipped++
+                        if (outcome.matchedRecord != null && outcome.enrichedRecord != null) {
+                            val idx = newRecords.indexOfFirst { it.id == outcome.matchedRecord.id }
+                            if (idx >= 0) {
+                                newRecords[idx] = outcome.enrichedRecord
+                            }
+                        }
+                        continue
+                    }
 
                     if (existingIds.contains(id)) {
                         duplicatesSkipped++
@@ -317,15 +367,7 @@ class SmsPlugin : Plugin() {
                     }
 
                     existingIds.add(id)
-                    val record = TransactionRecord(
-                        id = id,
-                        status = CandidateStatus.PENDING_REVIEW,
-                        parsed = parsed,
-                        reason = decision.reason ?: "Imported from historical SMS",
-                        createdAtMs = dateMs,
-                        notified = false
-                    )
-                    newRecords.add(record)
+                    newRecords.add(candidate)
                 }
             }
 
@@ -345,10 +387,64 @@ class SmsPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun cleanQueue(call: PluginCall) {
+        val ctx = context
+        val store = TransactionStore(ctx)
+        val result = store.cleanQueue()
+        val js = JSObject()
+        js.put("initialCount", result.initialCount)
+        js.put("quarantinedCount", result.quarantinedCount)
+        js.put("mergedCount", result.mergedCount)
+        js.put("finalCount", result.finalCount)
+        call.resolve(js)
+    }
+
+    @PluginMethod
     fun syncNow(call: PluginCall) {
         val ctx = context
-        enqueueSync(ctx)
-        call.resolve(JSObject().apply { put("syncStarted", true) })
+        Thread {
+            var syncedCount = 0
+            var errorMsg: String? = null
+            try {
+                val store = TransactionStore(ctx)
+                val settings = store.getSettings()
+                val backendUrl = settings.backendUrl?.trim()?.takeIf { it.isNotBlank() }
+                if (backendUrl != null) {
+                    val queue = store.loadQueue()
+                    val ready = queue.filter { it.status == CandidateStatus.READY_TO_SYNC }
+                    val secureStore = SecureTokenStore(ctx)
+                    val authToken = secureStore.getToken()
+                    if (ready.isNotEmpty() && !authToken.isNullOrBlank()) {
+                        val activeTypes = SyncWorker.fetchActiveExpenseTypes(backendUrl, authToken)
+                        for (record in ready) {
+                            val result = SyncWorker.syncTransaction(backendUrl, record, activeTypes, authToken)
+                            if (result.created || result.replayed) {
+                                store.upsert(
+                                    record.copy(
+                                        status = CandidateStatus.SYNCED,
+                                        syncedAtMs = System.currentTimeMillis(),
+                                        error = null,
+                                    )
+                                )
+                                syncedCount++
+                            } else if (result.error != null) {
+                                errorMsg = result.error
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                errorMsg = e.message
+            } finally {
+                enqueueSync(ctx)
+                val res = JSObject().apply {
+                    put("syncStarted", true)
+                    put("syncedCount", syncedCount)
+                    if (errorMsg != null) put("error", errorMsg)
+                }
+                call.resolve(res)
+            }
+        }.start()
     }
 
     @PluginMethod
@@ -401,7 +497,11 @@ class SmsPlugin : Plugin() {
     private fun enqueueSync(context: Context) {
         try {
             val workManager = WorkManager.getInstance(context)
+            val constraints = androidx.work.Constraints.Builder()
+                .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                .build()
             val request = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(constraints)
                 .setInitialDelay(1, TimeUnit.SECONDS)
                 .build()
             workManager.enqueue(request)
@@ -424,6 +524,12 @@ class SmsPlugin : Plugin() {
         obj.put("error", r.error ?: "")
         obj.put("retryCount", r.retryCount)
         obj.put("notified", r.notified)
+        obj.put("availableBalance", r.parsed.availableBalancePaise?.let { paiseToRupees(it) } ?: "")
+        obj.put("availableBalancePaise", r.parsed.availableBalancePaise ?: -1L)
+        obj.put("bankName", r.parsed.bankName ?: "")
+        obj.put("accountSuffix", r.parsed.accountSuffix ?: "")
+        obj.put("direction", if (r.parsed.status == com.moneytrack.app.sms.TxnStatus.CREDIT) "CREDIT" else "DEBIT")
+        obj.put("classification", r.parsed.classification.name)
         return obj
     }
 
@@ -460,13 +566,4 @@ class SmsPlugin : Plugin() {
     }
 
     private fun isLeap(year: Int): Boolean = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
-
-    private fun categoryToTypeId(category: String?): Int? {
-        if (category == null) return null
-        return when (category.lowercase()) {
-            "mobile recharge" -> 5
-            "bus travel" -> 2
-            else -> null
-        }
-    }
 }

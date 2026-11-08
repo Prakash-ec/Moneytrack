@@ -108,3 +108,16 @@ def report_balance(
     if not acc:
         raise HTTPException(status_code=404, detail="Bank account not found")
     return BankAccountRead.model_validate(acc)
+
+
+@router.post("/{account_id}/reconcile", response_model=BankAccountRead, summary="Reconcile bank account to latest reported balance")
+def reconcile_account(
+    account_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> BankAccountRead:
+    try:
+        acc = service.reconcile_account_to_reported(db, account_id, user_id=current_user.id)
+        return BankAccountRead.model_validate(acc)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

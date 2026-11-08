@@ -87,6 +87,15 @@ export function HomePage() {
     recentQuery.refetch()
   }
 
+  // Auto-refresh financial overview on background or SMS ingestion events
+  useEffect(() => {
+    const handleSmsChanged = () => {
+      retryAll()
+    }
+    window.addEventListener('moneytrack:sms-changed', handleSmsChanged)
+    return () => window.removeEventListener('moneytrack:sms-changed', handleSmsChanged)
+  }, [summaryQuery, cashflowQuery, recentQuery, byTypeQuery, trendsQuery])
+
   if (loading) {
     return <PageSkeleton />
   }
@@ -126,74 +135,96 @@ export function HomePage() {
       />
 
       {/* Financial Overview & Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5 items-stretch">
-        <div className="lg:col-span-6 flex flex-col justify-center">
-          <CashflowHeroCard
-            totalPaise={summary?.total_paise ?? 0}
-            transactionCount={summary?.transaction_count ?? 0}
-            periodLabel={formatRangeLabel(period.range)}
-            totalBankBalancePaise={cashflow?.consolidated_balance_paise}
-            reportedBankBalancePaise={cashflow?.total_reported_balance_paise}
-            linkedAccountsCount={cashflow?.bank_accounts?.length ?? 0}
-            reconciled={cashflow ? cashflow.reconciliation_difference_paise === 0 : true}
-            discrepancyPaise={cashflow?.reconciliation_difference_paise ?? 0}
-            incomeTotalPaise={cashflow?.total_income_paise ?? 0}
-            onAddExpense={() => openCreate()}
-            onAddIncome={() => navigate('/transactions?tab=income')}
-            onTransfer={() => navigate('/transactions?tab=transfers')}
-            onScanReceipt={() => openScanReceipt()}
-            onManageAccounts={() => navigate('/bank-accounts')}
-          />
-        </div>
+      {(() => {
+        const accountsList = cashflow?.bank_accounts ?? (cashflow as any)?.accounts ?? []
+        const totalBalance =
+          (cashflow?.consolidated_balance_paise || (cashflow as any)?.total_bank_balance_paise) ||
+          cashflow?.total_reported_balance_paise ||
+          0
+        const reportedBalance = cashflow?.total_reported_balance_paise
+        const accountsCount = accountsList.length || (cashflow as any)?.account_count || 0
+        const discrepancyPaise =
+          cashflow?.reconciliation_difference_paise ??
+          (reportedBalance != null && totalBalance != null ? Math.abs(reportedBalance - totalBalance) : 0)
+        const isReconciled = discrepancyPaise === 0
 
-        <div className="lg:col-span-6 flex flex-col justify-between">
-          {/* Bank Accounts Mini Strip */}
-          {cashflow?.bank_accounts && cashflow.bank_accounts.length > 0 ? (
-            <div className="card p-5 h-full flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
-                    <span className="text-xs font-semibold text-text">
-                      Linked accounts ({cashflow.bank_accounts.length})
-                    </span>
-                  </div>
-                  <Link
-                    to="/bank-accounts"
-                    className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
-                  >
-                    <span>Manage</span>
-                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
-                  </Link>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {cashflow.bank_accounts.slice(0, 4).map((acc) => (
-                    <div
-                      key={acc.id}
-                      onClick={() => navigate('/bank-accounts')}
-                      className="flex items-center justify-between p-3 rounded-xl bg-surface-raised border border-border hover:border-border-strong transition-colors cursor-pointer"
-                    >
-                      <div className="min-w-0 pr-2">
-                        <div className="font-medium text-xs text-text truncate">{acc.name}</div>
-                        <div className="text-[10px] text-muted flex items-center gap-1">
-                          <span>{acc.bank_name}</span>
-                          {acc.account_number_mask && (
-                            <span className="font-mono tabular-nums">· ••{acc.account_number_mask}</span>
-                          )}
-                        </div>
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5 items-stretch">
+            <div className="lg:col-span-6 flex flex-col justify-center">
+              <CashflowHeroCard
+                totalPaise={summary?.total_paise ?? 0}
+                transactionCount={summary?.transaction_count ?? 0}
+                periodLabel={formatRangeLabel(period.range)}
+                totalBankBalancePaise={totalBalance}
+                reportedBankBalancePaise={reportedBalance}
+                linkedAccountsCount={accountsCount}
+                reconciled={isReconciled}
+                discrepancyPaise={discrepancyPaise}
+                incomeTotalPaise={cashflow?.total_income_paise ?? 0}
+                onAddExpense={() => openCreate()}
+                onAddIncome={() => navigate('/transactions?tab=income')}
+                onTransfer={() => navigate('/transactions?tab=transfers')}
+                onScanReceipt={() => openScanReceipt()}
+                onManageAccounts={() => navigate('/bank-accounts')}
+              />
+            </div>
+
+            <div className="lg:col-span-6 flex flex-col justify-between">
+              {/* Bank Accounts Mini Strip */}
+              {accountsList.length > 0 ? (
+                <div className="card p-5 h-full flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
+                        <span className="text-xs font-semibold text-text">
+                          Linked accounts ({accountsCount})
+                        </span>
                       </div>
-                      <div className="text-right shrink-0">
-                        <div className="font-mono tabular-nums text-xs font-semibold text-text">
-                          {formatINR(acc.current_balance_paise)}
-                        </div>
-                        <div className="text-[10px] text-muted capitalize">
-                          {acc.account_type.replace('_', ' ')}
-                        </div>
-                      </div>
+                      <Link
+                        to="/bank-accounts"
+                        className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
+                      >
+                        <span>Manage</span>
+                        <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                      </Link>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {accountsList.slice(0, 4).map((acc: any) => (
+                        <div
+                          key={acc.id}
+                          onClick={() => navigate('/bank-accounts')}
+                          className="flex items-center justify-between p-3 rounded-xl bg-surface-raised border border-border hover:border-border-strong transition-colors cursor-pointer"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="font-medium text-xs text-text truncate">
+                              {acc.name || acc.account_name}
+                            </div>
+                            <div className="text-[10px] text-muted flex items-center gap-1">
+                              <span>{acc.bank_name}</span>
+                              {acc.account_number_mask && (
+                                <span className="font-mono tabular-nums">· ••{acc.account_number_mask}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="font-mono tabular-nums text-xs font-semibold text-text">
+                              {formatINR(acc.current_balance_paise || acc.last_reported_balance_paise || 0)}
+                            </div>
+                            {acc.last_reported_balance_paise != null ? (
+                              <div className="text-[10px] text-sky-400 font-mono tabular-nums">
+                                SMS: {formatINR(acc.last_reported_balance_paise)}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-muted capitalize">
+                                {acc.account_type?.replace('_', ' ') || 'account'}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
               {/* Quick Record Chips Mini-Bar */}
               <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
@@ -263,6 +294,8 @@ export function HomePage() {
           )}
         </div>
       </div>
+    )
+  })()}
 
       {hasExpenses ? (
         <>

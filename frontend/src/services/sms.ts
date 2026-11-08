@@ -15,6 +15,12 @@ export interface PendingTransaction {
   error: string
   retryCount: number
   notified: boolean
+  availableBalance?: string | null
+  availableBalancePaise?: number | null
+  bankName?: string | null
+  accountSuffix?: string | null
+  direction?: string | null
+  classification?: string | null
 }
 
 export interface SmsSettings {

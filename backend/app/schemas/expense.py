@@ -26,6 +26,9 @@ class ExpenseBase(BaseModel):
     note: str | None = Field(default=None, max_length=500)
     payment_method: PaymentMethod | None = None
     merchant: str | None = Field(default=None, max_length=120)
+    bank_reference: str | None = Field(default=None, max_length=100)
+    source: str | None = Field(default="manual", max_length=20)
+    confidence: str | None = Field(default="HIGH", max_length=20)
 
     @field_validator("payment_method", mode="before")
     @classmethod
@@ -110,6 +113,9 @@ class ExpenseRead(BaseModel):
     note: str | None
     payment_method: str | None
     merchant: str | None
+    bank_reference: str | None = None
+    source: str | None = "manual"
+    confidence: str | None = "HIGH"
     created_at: datetime
     updated_at: datetime
     expense_type: ExpenseTypeRef

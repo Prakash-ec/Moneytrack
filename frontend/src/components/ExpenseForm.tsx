@@ -22,6 +22,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
 import { TypeConfirmationDialog } from '@/components/TypeConfirmationDialog'
+import { TypeSelectSheet } from '@/components/TypeSelectSheet'
 import { api, ApiError } from '@/services/api'
 import { enqueueOfflineExpense } from '@/services/offlineQueue'
 import { useApiQuery } from '@/hooks/useApiQuery'
@@ -346,6 +347,12 @@ export function ExpenseForm({
   const activeTypes = selectableTypes.filter((type) => !type.is_archived)
   const selectedType = selectableTypes.find((type) => String(type.id) === selectedTypeId)
   const autoOpenedQuickCreate = useRef(false)
+
+  const frequentSuggestions = useMemo(() => {
+    return [...activeTypes]
+      .sort((a, b) => (b.transaction_count || 0) - (a.transaction_count || 0))
+      .slice(0, 4)
+  }, [activeTypes])
 
   useEffect(() => {
     if (
@@ -868,43 +875,42 @@ export function ExpenseForm({
             </div>
           ) : null}
 
-          <Field
-            label="Expense type"
-            htmlFor="expense-type"
-            error={errors.expense_type_id?.message}
-            hint={
-              selectedType?.is_archived
-                ? 'This type is archived. Existing expenses can still be edited, but archived types cannot be used for new expenses.'
-                : undefined
-            }
-          >
-            <div className="flex gap-2">
+          <div>
+            <input type="hidden" {...register('expense_type_id')} />
+            <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <Select
+                <TypeSelectSheet
                   id="expense-type"
-                  data-autofocus={selectableTypes.length ? true : undefined}
-                  aria-invalid={Boolean(errors.expense_type_id) || undefined}
-                  {...register('expense_type_id')}
-                >
-                  <option value="">Select a type…</option>
-                  {selectableTypes.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                      {type.is_archived ? ' (archived)' : ''}
-                    </option>
-                  ))}
-                  {!typesQuery.loading && selectableTypes.length === 0 ? (
-                    <option value="" disabled>
-                      No expense types yet
-                    </option>
-                  ) : null}
-                </Select>
+                  label="Expense type"
+                  value={selectedTypeId}
+                  onChange={(newId) => {
+                    setValue('expense_type_id', String(newId), {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }}
+                  options={selectableTypes}
+                  suggestions={frequentSuggestions}
+                  placeholder={typesQuery.loading ? 'Loading types…' : 'Select expense type…'}
+                  disabled={typesQuery.loading || selectableTypes.length === 0}
+                  error={errors.expense_type_id?.message}
+                  hint={
+                    selectedType?.is_archived
+                      ? 'This type is archived. Existing expenses can still be edited, but archived types cannot be used for new expenses.'
+                      : undefined
+                  }
+                  onCreateNew={() => {
+                    setShowQuickType((current) => !current)
+                    setQuickError(null)
+                  }}
+                  createButtonLabel={showQuickType ? 'Hide new type form' : 'Create a new type'}
+                />
               </div>
               <Button
                 type="button"
                 variant="secondary"
                 size="icon"
-                className="h-11 w-11 shrink-0"
+                className="mt-6 h-12 w-12 sm:h-11 sm:w-11 shrink-0"
                 onClick={() => {
                   setShowQuickType((current) => !current)
                   setQuickError(null)
@@ -915,7 +921,7 @@ export function ExpenseForm({
                 <Plus className="h-5 w-5" aria-hidden />
               </Button>
             </div>
-          </Field>
+          </div>
 
           {showQuickType ? (
             <div

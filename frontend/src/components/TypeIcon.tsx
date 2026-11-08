@@ -84,9 +84,10 @@ const ICONS: Record<string, LucideIcon> = Object.fromEntries(
 )
 
 const sizes = {
-  sm: { wrapper: 'h-9 w-9 rounded-2xl', icon: 'h-4 w-4' },
-  md: { wrapper: 'h-11 w-11 rounded-2xl', icon: 'h-5 w-5' },
-  lg: { wrapper: 'h-14 w-14 rounded-2xl', icon: 'h-6 w-6' },
+  xs: { wrapper: 'h-7 w-7 rounded-lg', icon: 'h-3.5 w-3.5' },
+  sm: { wrapper: 'h-8 w-8 rounded-xl', icon: 'h-4 w-4' },
+  md: { wrapper: 'h-10 w-10 rounded-xl', icon: 'h-5 w-5' },
+  lg: { wrapper: 'h-12 w-12 rounded-xl', icon: 'h-5 w-5' },
 }
 
 export function TypeIcon({
@@ -105,7 +106,7 @@ export function TypeIcon({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center justify-center border',
+        'inline-flex shrink-0 aspect-square items-center justify-center border',
         classes.wrapper,
         className,
       )}

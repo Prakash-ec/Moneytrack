@@ -566,6 +566,8 @@ export const api = {
     request<{ success: boolean; message: string }>(`/bank-accounts/${id}`, { method: 'DELETE' }),
   recalculateAccountBalance: (id: number) =>
     request<BankAccount>(`/bank-accounts/${id}/recalculate`, { method: 'POST' }),
+  reconcileBankAccount: (id: number) =>
+    request<BankAccount>(`/bank-accounts/${id}/reconcile`, { method: 'POST' }),
   reportBankBalance: (id: number, balancePaise: number, reportedAt?: string) =>
     request<BankAccount>(`/bank-accounts/${id}/report-balance`, jsonBody({ balance_paise: balancePaise, reported_at: reportedAt })),
   getBankReconciliation: () =>
@@ -601,8 +603,8 @@ export const api = {
     return request<IncomePage>(`/incomes${toQueryString(qParams)}`)
   },
   getIncome: (id: number) => request<Income>(`/incomes/${id}`),
-  createIncome: (input: IncomeCreateInput) =>
-    request<Income>('/incomes', jsonBody(input)),
+  createIncome: (input: IncomeCreateInput, idempotencyKey?: string) =>
+    request<Income>('/incomes', { ...jsonBody(input), idempotencyKey }),
   updateIncome: (id: number, input: IncomeUpdateInput) =>
     request<Income>(`/incomes/${id}`, patchBody(input)),
   deleteIncome: (id: number) =>
@@ -646,6 +648,33 @@ export const api = {
   // Weekly Spending Report
   getWeeklyReport: (startDate?: string, endDate?: string) =>
     request<WeeklyReportData>(`/reports/weekly${toQueryString({ start_date: startDate, end_date: endDate })}`),
+
+  // SMS Intelligence Ingest
+  ingestSms: (
+    payload: {
+      amount_paise: number
+      direction?: 'CREDIT' | 'DEBIT' | 'TRANSFER' | 'UNKNOWN'
+      reference?: string | null
+      transaction_date?: string | null
+      merchant_or_payer?: string | null
+      suggested_category?: string | null
+      account_suffix?: string | null
+      bank_name?: string | null
+      available_balance_paise?: number | null
+      body?: string | null
+      sender?: string | null
+      note?: string | null
+    },
+    idempotencyKey?: string,
+  ) => {
+    const opts: RequestOptions = {
+      ...jsonBody(payload),
+    }
+    if (idempotencyKey) {
+      opts.idempotencyKey = idempotencyKey
+    }
+    return request<any>('/sms/ingest', opts)
+  },
 }
 
 function filenameFromDisposition(disposition: string | null, fallback: string): string {

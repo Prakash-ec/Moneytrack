@@ -39,6 +39,7 @@ import { useTheme } from '@/providers/ThemeProvider'
 import { useToast } from '@/providers/ToastProvider'
 import { api, downloadExport, getApiBase, setApiBase, testConnection } from '@/services/api'
 import { SmsPlugin, type PermissionStatus } from '@/services/sms'
+import { getOfflineQueue } from '@/services/offlineQueue'
 import { cn } from '@/utils/cn'
 
 export function SettingsPage() {
@@ -57,6 +58,19 @@ export function SettingsPage() {
     expenseCount: number
   } | null>(null)
   const [restoring, setRestoring] = useState(false)
+
+  const handleLogout = () => {
+    const pendingCount = getOfflineQueue(user?.id).length
+    if (pendingCount > 0 && typeof window !== 'undefined') {
+      const confirmed = window.confirm(
+        `You have ${pendingCount} unsynchronized offline transaction${
+          pendingCount === 1 ? '' : 's'
+        } pending on this device.\n\nThey are preserved securely under your account and will sync automatically when you log back in.\n\nDo you want to log out now?`
+      )
+      if (!confirmed) return
+    }
+    logout()
+  }
 
   // Backend URL configuration & connection testing
   const [backendUrl, setBackendUrl] = useState(() => getApiBase())
@@ -425,6 +439,20 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
+          <div className="border-t border-border/60 px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-ink">Welcome Experience</p>
+              <p className="text-xs text-subtle">Review the introductory brand story and capabilities</p>
+            </div>
+            <Link
+              to="/welcome"
+              className="text-xs font-semibold text-primary hover:text-primary-hover flex items-center gap-1.5"
+            >
+              <span>View Welcome</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        
         </div>
       </section>
 
@@ -452,7 +480,7 @@ export function SettingsPage() {
               <Button
                 variant="danger"
                 size="sm"
-                onClick={() => logout()}
+                onClick={handleLogout}
                 className="gap-1.5"
               >
                 <LogOut className="h-3.5 w-3.5" aria-hidden />
