@@ -36,6 +36,7 @@ backend/data/*.sqlite
 backend/data/*.sqlite-*
 backend/data/*.json
 backend/data/*.csv
+*ci_test.db*
 backups/
 *.dump
 *.tar

@@ -16,7 +16,7 @@ services:
       - key: SECRET_KEY
         sync: false
       - key: ALLOW_REGISTRATION
-        value: "false"
+        value: "true"
       - key: RUN_STARTUP_MIGRATIONS
         value: "false"
       - key: CORS_ORIGINS
