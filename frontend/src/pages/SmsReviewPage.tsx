@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   Edit3,
+  History,
   Inbox,
   MessageSquare,
   Phone,
@@ -20,12 +21,24 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/States'
 import { Field, Input, Select } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
+import { TypeSelectSheet } from '@/components/TypeSelectSheet'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useToast } from '@/providers/ToastProvider'
 import { api } from '@/services/api'
 import { SmsPlugin, type PendingTransaction, type SmsSettings } from '@/services/sms'
-import type { ExpenseType, IncomeType } from '@/types/api'
+import type { ExpenseType } from '@/types/api'
 import { formatDate } from '@/utils/dates'
+
+function isCreditItem(item: { direction?: string | null; classification?: string | null; reason?: string; note?: string; category?: string }): boolean {
+  return (
+    item.direction === 'CREDIT' ||
+    item.classification === 'BANK_CREDIT' ||
+    item.reason?.toLowerCase().includes('credit') === true ||
+    item.note?.toLowerCase().includes('credit') === true ||
+    item.category?.toLowerCase() === 'salary' ||
+    item.category?.toLowerCase() === 'income'
+  )
+}
 
 function CardSkeleton() {
   return (
@@ -56,6 +69,9 @@ export function SmsReviewPage() {
   } | null>(null)
   const [rejectConfirm, setRejectConfirm] = useState<{ id: string } | null>(null)
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([])
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importDays, setImportDays] = useState(30)
+  const [importing, setImporting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -93,6 +109,7 @@ export function SmsReviewPage() {
     try {
       await SmsPlugin.syncNow()
       await load()
+      window.dispatchEvent(new CustomEvent('moneytrack:sms-changed'))
       showToast({
         title: 'Synced',
         description: 'Pending SMS transactions were sent to the backend.',
@@ -114,59 +131,44 @@ export function SmsReviewPage() {
       try {
         if (isNative) {
           await SmsPlugin.confirmTransaction({ id })
+          await SmsPlugin.syncNow()
+          await load()
         } else {
           const item = items.find((i) => i.id === id)
           if (item && item.amount) {
             const paise = Math.round(parseFloat(item.amount) * 100)
-            const isCredit =
-              item.reason?.toLowerCase().includes('credit') ||
-              item.note?.toLowerCase().includes('credit') ||
-              item.category?.toLowerCase() === 'salary' ||
-              item.category?.toLowerCase() === 'income'
+            const isCredit = isCreditItem(item)
 
-            if (isCredit) {
-              const incomeTypes = await api.listIncomeTypes().catch(() => [] as IncomeType[])
-              const type =
-                incomeTypes.find(
-                  (t: IncomeType) => t.name.toLowerCase() === item.category.toLowerCase(),
-                ) || incomeTypes[0]
-              if (type) {
-                await api.createIncome({
-                  amount_paise: paise,
-                  income_date: item.date || new Date().toISOString().slice(0, 10),
-                  income_type_id: type.id,
-                  payer: item.merchant || 'Auto-credit via SMS',
-                  note: item.note || 'Authorised SMS credit',
-                  payment_method: 'UPI',
-                })
-              }
-            } else {
-              const type =
-                expenseTypes.find(
-                  (t) => t.name.toLowerCase() === item.category.toLowerCase(),
-                ) || expenseTypes[0]
-              if (type) {
-                await api.createExpense({
-                  amount_paise: paise,
-                  expense_date: item.date || new Date().toISOString().slice(0, 10),
-                  expense_type_id: type.id,
-                  merchant: item.merchant || 'Unrecognised merchant',
-                  note: item.note || 'Authorised SMS transaction',
-                  payment_method: 'UPI',
-                })
-              }
-            }
+            await api.ingestSms(
+              {
+                amount_paise: paise,
+                direction: isCredit ? 'CREDIT' : 'DEBIT',
+                reference: item.reference,
+                transaction_date: item.date,
+                merchant_or_payer: item.merchant,
+                suggested_category: item.category,
+                account_suffix: item.accountSuffix,
+                bank_name: item.bankName,
+                available_balance_paise: item.availableBalancePaise,
+                note: item.note,
+              },
+              item.id,
+            )
           }
         }
+        const targetItem = items.find((i) => i.id === id)
+        const isCredit = targetItem ? isCreditItem(targetItem) : false
         setItems((current) => current.filter((item) => item.id !== id))
         showToast({
-          title: 'Payment authorised',
-          description: 'Transaction recorded and added to your expenses.',
+          title: isCredit ? 'Income confirmed' : 'Transaction confirmed',
+          description: isCredit
+            ? 'Transaction recorded and added to your income.'
+            : 'Transaction recorded and added to your expenses.',
         })
         window.dispatchEvent(new CustomEvent('moneytrack:sms-changed'))
       } catch (error) {
         showToast({
-          title: 'Could not authorise',
+          title: 'Could not confirm transaction',
           description: error instanceof Error ? error.message : 'Please try again.',
           variant: 'error',
         })
@@ -174,7 +176,7 @@ export function SmsReviewPage() {
         setLoading(false)
       }
     },
-    [isNative, items, expenseTypes, showToast],
+    [isNative, items, load, showToast],
   )
 
   const handleRejectConfirm = (id: string) => setRejectConfirm({ id })
@@ -314,7 +316,7 @@ export function SmsReviewPage() {
     const demoItem: PendingTransaction = {
       id: demoId,
       status: 'PENDING_REVIEW',
-      reason: 'Unrecognised payment · Authorisation required',
+      reason: 'New transaction · Review required',
       createdAtMs: Date.now(),
       amount: '750.00',
       merchant: 'Zomato Payment Hyd',
@@ -329,9 +331,9 @@ export function SmsReviewPage() {
     }
     setItems((prev) => [demoItem, ...prev.filter((p) => p.id !== demoId)])
     showToast({
-      title: 'Action Required: Authorise Payment',
+      title: 'New Transaction Needs Review',
       description:
-        'Unrecognised payment of ₹750.00 at Zomato Payment Hyd detected. Tap Authorise to add to expenses.',
+        'A transaction of ₹750.00 at Zomato Payment Hyd needs your review. Confirm its details and choose a category before adding it to your expenses.',
       variant: 'info',
     })
     window.dispatchEvent(new CustomEvent('moneytrack:sms-changed'))
@@ -341,56 +343,151 @@ export function SmsReviewPage() {
     (i) => i.status === 'PENDING_REVIEW' || i.status === 'READY_TO_SYNC',
   ).length
 
+  const handleImportHistorical = useCallback(async () => {
+    setImporting(true)
+    try {
+      if (isNative) {
+        await SmsPlugin.requestPermissions()
+        const res = await SmsPlugin.importHistoricalSms({ days: importDays })
+        showToast({
+          title: 'SMS import complete',
+          description: `Scanned ${res.totalScanned} messages. Found ${res.eligibleFound} transactions (${res.newImported} imported, ${res.duplicatesSkipped} duplicates skipped).`,
+          variant: 'success',
+        })
+        await SmsPlugin.syncNow()
+      } else {
+        const sampleCount = importDays === 7 ? 2 : importDays === 30 ? 3 : 5
+        const simulated: PendingTransaction[] = [
+          {
+            id: `sim-hist-${Date.now()}-1`,
+            status: 'PENDING_REVIEW',
+            reason: 'Historical bank SMS debit · Review required',
+            createdAtMs: Date.now() - 86400000 * 2,
+            amount: '1240.00',
+            merchant: 'Swiggy Instamart Bangalore',
+            reference: 'UPI/409218491823',
+            date: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10),
+            category: 'Groceries',
+            note: 'Historical SMS import',
+            sender: 'VM-HDFCBK',
+            error: '',
+            retryCount: 0,
+            notified: false,
+          },
+          {
+            id: `sim-hist-${Date.now()}-2`,
+            status: 'PENDING_REVIEW',
+            reason: 'Historical bank SMS debit · Review required',
+            createdAtMs: Date.now() - 86400000 * 5,
+            amount: '699.00',
+            merchant: 'Jio Prepaid Recharge',
+            reference: 'UPI/408912389182',
+            date: new Date(Date.now() - 86400000 * 5).toISOString().slice(0, 10),
+            category: 'Bills',
+            note: 'Historical SMS import',
+            sender: 'AX-ICICIB',
+            error: '',
+            retryCount: 0,
+            notified: false,
+          },
+          {
+            id: `sim-hist-${Date.now()}-3`,
+            status: 'PENDING_REVIEW',
+            reason: 'Historical bank SMS debit · Review required',
+            createdAtMs: Date.now() - 86400000 * 8,
+            amount: '2450.00',
+            merchant: 'Apollo Pharmacy',
+            reference: 'POS/982173198',
+            date: new Date(Date.now() - 86400000 * 8).toISOString().slice(0, 10),
+            category: 'Healthcare',
+            note: 'Historical SMS import',
+            sender: 'VK-SBIINB',
+            error: '',
+            retryCount: 0,
+            notified: false,
+          },
+        ].slice(0, sampleCount)
+
+        setItems((prev) => [...simulated, ...prev])
+        showToast({
+          title: 'SMS import simulation',
+          description: `Imported ${simulated.length} sample historical transactions for review.`,
+          variant: 'info',
+        })
+      }
+      setImportModalOpen(false)
+      await load()
+      window.dispatchEvent(new CustomEvent('moneytrack:sms-changed'))
+    } catch (error) {
+      showToast({
+        title: 'SMS import failed',
+        description: error instanceof Error ? error.message : 'Please check SMS permissions.',
+        variant: 'error',
+      })
+    } finally {
+      setImporting(false)
+    }
+  }, [isNative, importDays, load, showToast])
+
   const handleBulkAuthorise = useCallback(async () => {
     if (items.length === 0) return
     setLoading(true)
     try {
-      for (const item of items) {
-        if (item.status === 'PENDING_REVIEW' || item.status === 'READY_TO_SYNC') {
-          if (isNative) {
+      if (isNative) {
+        for (const item of items) {
+          if (item.status === 'PENDING_REVIEW' || item.status === 'READY_TO_SYNC') {
             await SmsPlugin.confirmTransaction({ id: item.id })
-          } else if (item.amount) {
+          }
+        }
+        await SmsPlugin.syncNow()
+        await load()
+      } else {
+        for (const item of items) {
+          if (item.amount) {
             const paise = Math.round(parseFloat(item.amount) * 100)
-            const type =
-              expenseTypes.find(
-                (t) => t.name.toLowerCase() === item.category.toLowerCase(),
-              ) || expenseTypes[0]
-            if (type) {
-              await api.createExpense({
+            const isCredit = isCreditItem(item)
+
+            await api.ingestSms(
+              {
                 amount_paise: paise,
-                expense_date: item.date || new Date().toISOString().slice(0, 10),
-                expense_type_id: type.id,
-                merchant: item.merchant || 'Unrecognised merchant',
-                note: item.note || 'Authorised SMS transaction',
-                payment_method: 'UPI',
-              })
-            }
+                direction: isCredit ? 'CREDIT' : 'DEBIT',
+                reference: item.reference,
+                transaction_date: item.date,
+                merchant_or_payer: item.merchant,
+                suggested_category: item.category,
+                account_suffix: item.accountSuffix,
+                bank_name: item.bankName,
+                available_balance_paise: item.availableBalancePaise,
+                note: item.note,
+              },
+              item.id,
+            )
           }
         }
       }
       setItems([])
       showToast({
-        title: 'All payments authorised',
-        description: `Authorised and added ${pendingCount} transactions to expenses.`,
+        title: 'All transactions confirmed',
+        description: `Confirmed and recorded ${pendingCount} transactions.`,
       })
       window.dispatchEvent(new CustomEvent('moneytrack:sms-changed'))
     } catch (error) {
       showToast({
-        title: 'Bulk authorise error',
+        title: 'Bulk confirmation error',
         description: error instanceof Error ? error.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
       setLoading(false)
     }
-  }, [isNative, items, pendingCount, expenseTypes, showToast])
+  }, [isNative, items, pendingCount, load, showToast])
 
   return (
     <div className="page space-y-5">
       <PageHeader
         eyebrow="SMS review"
         title="SMS Review"
-        description="Review transactions detected from bank messages and authorise payments."
+        description="Review transactions detected from bank messages and add them to your records."
         actions={
           <div className="flex flex-wrap gap-2">
             {pendingCount > 1 && (
@@ -401,13 +498,22 @@ export function SmsReviewPage() {
                 disabled={loading}
               >
                 <CheckCircle2 className="h-4 w-4" aria-hidden />
-                <span>Authorise all ({pendingCount})</span>
+                <span>Confirm all ({pendingCount})</span>
               </Button>
             )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setImportModalOpen(true)}
+              disabled={loading || importing}
+            >
+              <History className="h-4 w-4" aria-hidden />
+              <span>Import SMS history</span>
+            </Button>
             {!isNative ? (
               <Button variant="secondary" size="sm" onClick={handleSimulateSms}>
                 <MessageSquare className="h-4 w-4" aria-hidden />
-                <span>Simulate unrecognised SMS</span>
+                <span>Simulate review SMS</span>
               </Button>
             ) : (
               <>
@@ -441,16 +547,16 @@ export function SmsReviewPage() {
           <Badge tone="warning">Android Feature</Badge>
           <h2>SMS detection runs natively on your Android device</h2>
           <p>
-            When a bank SMS arrives on Android, MoneyTrack inspects it in the background. If any
-            unrecognised or pending payment is detected, a high-priority alert reminds you to authorise
-            it so it can be recorded into your expenses.
+            When a bank SMS arrives on Android, MoneyTrack inspects it in the background. If a new
+            transaction needs your review, an alert reminds you to confirm its details so it can be
+            recorded into your accounts.
           </p>
           <div className="feature-list">
             <span>
               <Check size={17} aria-hidden /> Private, on-device processing
             </span>
             <span>
-              <Check size={17} aria-hidden /> You authorise every expense
+              <Check size={17} aria-hidden /> You review every transaction
             </span>
             <span>
               <Check size={17} aria-hidden /> Works with any Indian bank SMS
@@ -504,21 +610,43 @@ export function SmsReviewPage() {
                   {item.status === 'PENDING_REVIEW' && (
                     <div className="mb-2.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-500 dark:text-amber-400 border border-amber-500/20">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      <span>Unrecognised payment detected · Please authorise to add to expenses</span>
+                      <span>
+                        {isCreditItem(item)
+                          ? 'New transaction · Review and confirm to add to income'
+                          : 'New transaction · Review and confirm to add to expenses'}
+                      </span>
                     </div>
                   )}
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <p className="text-sm font-semibold text-[var(--text)] truncate">
                       {item.merchant || 'Unknown merchant'}
                     </p>
-                    <span className="shrink-0 tabular text-base font-bold text-[var(--text)]">
-                      {item.amount ? `₹${item.amount}` : '—'}
+                    <span
+                      className={`shrink-0 tabular text-base font-bold ${
+                        isCreditItem(item)
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-[var(--text)]'
+                      }`}
+                    >
+                      {item.amount ? `${isCreditItem(item) ? '+' : ''}₹${item.amount}` : '—'}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)] mb-2">
                     <span>{item.date ? formatDate(item.date) : '—'}</span>
                     <span>·</span>
-                    <span>{item.sender || '—'}</span>
+                    <span>{item.bankName || item.sender || '—'}</span>
+                    {item.accountSuffix && (
+                      <>
+                        <span>·</span>
+                        <span>A/c ••{item.accountSuffix}</span>
+                      </>
+                    )}
+                    {item.availableBalance && (
+                      <>
+                        <span>·</span>
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">Bal: ₹{item.availableBalance}</span>
+                      </>
+                    )}
                     {item.reference && (
                       <>
                         <span>·</span>
@@ -526,7 +654,15 @@ export function SmsReviewPage() {
                       </>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={isCreditItem(item) ? 'positive' : 'neutral'}>
+                      {isCreditItem(item) ? 'Income' : 'Expense'}
+                    </Badge>
+                    {item.classification && (
+                      <Badge tone="neutral" className="uppercase text-[10px]">
+                        {item.classification.replace(/_/g, ' ')}
+                      </Badge>
+                    )}
                     <Badge tone="neutral">
                       {item.category || 'Uncategorized'}
                     </Badge>
@@ -554,7 +690,7 @@ export function SmsReviewPage() {
                     disabled={loading || item.status === 'SYNCED'}
                   >
                     <CheckCircle2 className="h-4 w-4" aria-hidden />
-                    Authorise payment
+                    {isCreditItem(item) ? 'Confirm income' : 'Confirm transaction'}
                   </Button>
                   <Button
                     variant="danger"
@@ -609,29 +745,22 @@ export function SmsReviewPage() {
                 type="text"
               />
             </Field>
-            <Field label="Category">
-              <Select
-                value={editFields.category}
-                onChange={(e) =>
-                  setEditFields({ ...editFields, category: e.target.value })
-                }
-              >
-                <option value="">Select category...</option>
-                {editFields.category &&
-                  !expenseTypes.some(
+            <div>
+              <TypeSelectSheet
+                label="Category / Expense Type"
+                value={
+                  expenseTypes.find(
                     (t) => t.name.toLowerCase() === editFields.category.toLowerCase(),
-                  ) && (
-                    <option value={editFields.category}>
-                      {editFields.category} (Detected)
-                    </option>
-                  )}
-                {expenseTypes.map((type) => (
-                  <option key={type.id} value={type.name}>
-                    {type.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+                  )?.id ?? editFields.category
+                }
+                onChange={(_val, item) => {
+                  setEditFields({ ...editFields, category: item?.name || String(_val) })
+                }}
+                options={expenseTypes}
+                placeholder="Select category..."
+                suggestions={expenseTypes.slice(0, 4)}
+              />
+            </div>
             <Field label="Note">
               <Input
                 value={editFields.note}
@@ -654,6 +783,61 @@ export function SmsReviewPage() {
             </Button>
             <Button size="sm" loading={loading} onClick={saveEdit} disabled={loading}>
               Save & confirm
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {importModalOpen && (
+        <Modal
+          open={importModalOpen}
+          onClose={() => !importing && setImportModalOpen(false)}
+          title="Import historical SMS transactions"
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--muted)]">
+              MoneyTrack securely scans your device SMS inbox for past bank debits, recharges, and UPI transactions.
+            </p>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-xs text-[var(--muted)] space-y-1.5">
+              <p className="font-semibold text-[var(--text)]">🔒 Privacy guarantee</p>
+              <p>• SMS processing runs 100% locally on your device.</p>
+              <p>• Personal chats and OTPs are ignored and never saved.</p>
+              <p>• Transactions are queued for review and only recorded when you confirm them.</p>
+            </div>
+            <Field label="Import time period">
+              <Select
+                value={String(importDays)}
+                onChange={(e) => setImportDays(Number(e.target.value))}
+                disabled={importing}
+              >
+                <option value="7">Past 7 days</option>
+                <option value="15">Past 15 days</option>
+                <option value="30">Past 30 days (Recommended)</option>
+                <option value="60">Past 60 days</option>
+                <option value="90">Past 90 days</option>
+                <option value="180">Past 180 days (6 months)</option>
+                <option value="0">All available messages</option>
+              </Select>
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t border-[var(--border)] mt-4">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setImportModalOpen(false)}
+              disabled={importing}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={importing}
+              onClick={() => void handleImportHistorical()}
+              disabled={importing}
+            >
+              Start import
             </Button>
           </div>
         </Modal>

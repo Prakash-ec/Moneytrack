@@ -1,21 +1,28 @@
-import { AlertCircle, Lock, Mail, ShieldCheck, User as UserIcon, Wallet } from 'lucide-react'
+import { AlertCircle, Lock, Mail, ShieldCheck, User as UserIcon } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
+import { BrandLogo } from '@/components/BrandLogo'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/FormControls'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useAuth } from '@/providers/AuthProvider'
 
-export function LoginPage() {
-  useDocumentTitle('Sign In')
+interface LoginPageProps {
+  initialMode?: 'login' | 'register'
+}
+
+export function LoginPage({ initialMode }: LoginPageProps) {
+  const [searchParams] = useSearchParams()
+  const isRegisterFromQuery = searchParams.get('mode') === 'register' || initialMode === 'register'
+  useDocumentTitle(isRegisterFromQuery ? 'Create Account' : 'Sign In')
   const { isAuthenticated, isLoading, setupStatus, login, register } = useAuth()
   const navigate = useNavigate()
 
   // Determine initial mode: if instance is brand new (not configured), show register
   const isInitialSetup = setupStatus ? !setupStatus.is_configured : false
-  const [isRegisterMode, setIsRegisterMode] = useState<boolean>(() => isInitialSetup)
+  const [isRegisterMode, setIsRegisterMode] = useState<boolean>(() => isInitialSetup || isRegisterFromQuery)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -77,12 +84,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-canvas px-4 py-12 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen flex-col justify-center bg-canvas px-4 py-12 pt-[max(env(safe-area-inset-top,0px),3rem)] pb-[max(env(safe-area-inset-bottom,0px),3rem)] sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20">
-            <Wallet className="h-7 w-7" />
-          </div>
+          <BrandLogo variant="squircle" size={64} className="rounded-2xl shadow-lg shadow-primary/25" />
         </div>
         <h2 className="mt-4 text-center text-2xl font-bold tracking-tight text-ink sm:text-3xl">
           MoneyTrack

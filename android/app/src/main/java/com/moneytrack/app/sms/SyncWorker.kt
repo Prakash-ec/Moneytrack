@@ -389,6 +389,7 @@ class SyncWorker(context: Context, params: WorkerParameters) :
                     put("available_balance_paise", parsed.availableBalancePaise ?: JSONObject.NULL)
                     put("idempotency_key", record.id)
                     put("sender", parsed.sender ?: JSONObject.NULL)
+                    put("body", parsed.evidence ?: JSONObject.NULL)
                     put("raw_text", parsed.evidence ?: JSONObject.NULL)
                 }
 

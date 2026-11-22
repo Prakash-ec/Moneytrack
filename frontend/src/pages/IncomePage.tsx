@@ -12,6 +12,7 @@ import { useState } from 'react'
 
 import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
+import { TypeSelectSheet } from '@/components/TypeSelectSheet'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -22,7 +23,8 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { usePeriod } from '@/hooks/usePeriod'
 import { useToast } from '@/providers/ToastProvider'
-import { api } from '@/services/api'
+import { api, ApiError } from '@/services/api'
+import { enqueueOfflineIncome } from '@/services/offlineQueue'
 import type { BankAccount, Income, IncomeCreateInput, IncomeType } from '@/types/api'
 import { formatINR, parseRupeesToPaise } from '@/utils/currency'
 import { formatDate } from '@/utils/dates'
@@ -121,18 +123,18 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
     }
 
     setSubmitting(true)
-    try {
-      const payload: IncomeCreateInput = {
-        amount_paise: amountPaise,
-        income_type_id: Number(formTypeId),
-        account_id: formAccountId ? Number(formAccountId) : null,
-        income_date: formDate,
-        payer: formPayer.trim() || null,
-        payment_method: formPaymentMethod || null,
-        reference: formReference.trim() || null,
-        note: formNote.trim() || null,
-      }
+    const payload: IncomeCreateInput = {
+      amount_paise: amountPaise,
+      income_type_id: Number(formTypeId),
+      account_id: formAccountId ? Number(formAccountId) : null,
+      income_date: formDate,
+      payer: formPayer.trim() || null,
+      payment_method: formPaymentMethod || null,
+      reference: formReference.trim() || null,
+      note: formNote.trim() || null,
+    }
 
+    try {
       if (editingIncome) {
         await api.updateIncome(editingIncome.id, payload)
         showToast({ title: 'Income Updated', description: 'Changes saved successfully.' })
@@ -145,6 +147,16 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
       incomesQuery.refetch()
       bankAccountsQuery.refetch()
     } catch (err) {
+      if (!editingIncome && err instanceof ApiError && err.status === 0) {
+        enqueueOfflineIncome(payload)
+        showToast({
+          title: 'Income queued offline',
+          description: 'Saved on your device. It will automatically sync when reconnected.',
+          variant: 'info',
+        })
+        setIsDialogOpen(false)
+        return
+      }
       showToast({
         title: 'Save Failed',
         description: err instanceof Error ? err.message : 'Could not save income.',
@@ -450,29 +462,24 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Category *</label>
-              <select
-                required
-                value={formTypeId}
-                onChange={(e) => setFormTypeId(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
-              >
-                {incomeTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <TypeSelectSheet
+              label="Income Category *"
+              value={formTypeId}
+              onChange={(newId) => setFormTypeId(Number(newId))}
+              options={incomeTypes}
+              placeholder="Select income category…"
+              suggestions={incomeTypes.slice(0, 4)}
+            />
+          </div>
 
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-text mb-1">Bank Account</label>
               <select
                 value={formAccountId}
                 onChange={(e) => setFormAccountId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
               >
                 <option value="">No account</option>
                 {bankAccounts.map((acc) => (
@@ -482,9 +489,7 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
                 ))}
               </select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-text mb-1">Date *</label>
               <input
@@ -492,16 +497,18 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
                 required
                 value={formDate}
                 onChange={(e) => setFormDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
               />
             </div>
+          </div>
 
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-text mb-1">Payment Method</label>
               <select
                 value={formPaymentMethod}
                 onChange={(e) => setFormPaymentMethod(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
               >
                 <option value="UPI">UPI</option>
                 <option value="Bank Transfer">Bank Transfer (NEFT/IMPS)</option>
@@ -510,17 +517,17 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
                 <option value="Other">Other</option>
               </select>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Source / Payer</label>
-            <input
-              type="text"
-              value={formPayer}
-              onChange={(e) => setFormPayer(e.target.value)}
-              placeholder="e.g. Acme Corp, Client, Google Pay"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
-            />
+            <div>
+              <label className="block text-xs font-semibold text-text mb-1">Source / Payer</label>
+              <input
+                type="text"
+                value={formPayer}
+                onChange={(e) => setFormPayer(e.target.value)}
+                placeholder="e.g. Acme Corp, Client, Google Pay"
+                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
+              />
+            </div>
           </div>
 
           <div>
@@ -530,7 +537,7 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
               value={formReference}
               onChange={(e) => setFormReference(e.target.value)}
               placeholder="e.g. UPI/328491823901"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
             />
           </div>
 
@@ -541,7 +548,7 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
               value={formNote}
               onChange={(e) => setFormNote(e.target.value)}
               placeholder="Optional description"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none resize-none"
+              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none resize-none"
             />
           </div>
         </form>

@@ -61,7 +61,16 @@ class SmsReceiver : BroadcastReceiver() {
         val parsed = SmsParser.parse(body, sender, timestampMs)
         val decision = SmsEligibility.decide(parsed, body.lowercase())
 
-        val id = Fingerprint.of(sender, timestampMs, parsed.amountPaise, parsed.reference, parsed.transactionDate)
+        val id = Fingerprint.of(
+            sender = sender,
+            timestampMs = timestampMs,
+            amountPaise = parsed.amountPaise,
+            reference = parsed.reference,
+            transactionDate = parsed.transactionDate,
+            accountSuffix = parsed.accountSuffix,
+            bankName = parsed.bankName,
+            balancePaise = parsed.availableBalancePaise,
+        )
         val existing = store.loadQueue().find { it.id == id }
 
         val now = System.currentTimeMillis()
@@ -113,8 +122,8 @@ class SmsReceiver : BroadcastReceiver() {
         when (record.status) {
             CandidateStatus.PENDING_REVIEW -> {
                 if (!record.notified) {
-                    SmsNotificationHelper.showReviewNotification(context, record)
-                    val updated = record.copy(notified = true)
+                    val assignedId = SmsNotificationHelper.showReviewNotification(context, record)
+                    val updated = record.copy(notified = true, notificationId = assignedId)
                     store.upsert(updated)
                 }
             }
@@ -128,7 +137,11 @@ class SmsReceiver : BroadcastReceiver() {
     private fun enqueueSync(context: Context) {
         try {
             val workManager = androidx.work.WorkManager.getInstance(context)
+            val constraints = androidx.work.Constraints.Builder()
+                .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                .build()
             val request = androidx.work.OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(constraints)
                 .setInitialDelay(2, java.util.concurrent.TimeUnit.SECONDS)
                 .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.SECONDS)
                 .build()

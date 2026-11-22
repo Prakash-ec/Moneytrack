@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 96" width="420" height="96" fill="none" aria-label="MoneyTrack Logo Light">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="logoLeftGradLight" x1="20" y1="70" x2="60" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4338CA" />
+      <stop offset="100%" stop-color="#6366F1" />
+    </linearGradient>
+
+    <linearGradient id="logoRightGradLight" x1="45" y1="55" x2="80" y2="15" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5266EB" />
+      <stop offset="50%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <linearGradient id="logoOrbitLight" x1="15" y1="75" x2="85" y2="15" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5266EB" stop-opacity="0.25" />
+      <stop offset="60%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <linearGradient id="logoTrackTextGradLight" x1="210" y1="35" x2="330" y2="35" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5266EB" />
+      <stop offset="100%" stop-color="#6366F1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Symbol Container -->
+  <g transform="translate(10, 10)">
+    <rect width="76" height="76" rx="20" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5" />
+    
+    <!-- Tracking Orbit -->
+    <path
+      d="M 22 56 A 25 25 0 1 1 60 52"
+      stroke="url(#logoOrbitLight)"
+      stroke-width="2.6"
+      stroke-linecap="round"
+    />
+    <circle cx="60" cy="52" r="2.2" fill="#059669" />
+
+    <!-- Left Anchor & Arch -->
+    <path
+      d="M 25 54 V 31 C 25 27 28.5 24 32.5 24 C 34.8 24 37 25.2 38.2 27 L 41 31 L 37.5 35.5 L 33 30 C 32 28.8 30.5 29.5 30.5 31 V 54 Z"
+      fill="url(#logoLeftGradLight)"
+    />
+
+    <!-- Right Growth Vector Arrow -->
+    <path
+      d="M 37.5 35.5 L 41 31 L 44 35.5 L 51 26 C 52.5 24 54.5 23 57 23 L 64 17 V 30 L 53.5 30 L 58.5 27 C 57 26 55.2 26.2 54 27.5 L 44.5 39.5 V 54 H 40 V 41 Z"
+      fill="url(#logoRightGradLight)"
+    />
+
+    <!-- Nexus Center -->
+    <circle cx="41" cy="37" r="2.6" fill="#0284C7" />
+    <circle cx="41" cy="37" r="1.2" fill="#FFFFFF" />
+  </g>
+
+  <!-- Wordmark Text -->
+  <g transform="translate(104, 48)">
+    <text font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="32" letter-spacing="-0.03em" fill="#0F172A">Money</text>
+    <text x="100" font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="32" letter-spacing="-0.03em" fill="url(#logoTrackTextGradLight)">Track</text>
+    
+    <!-- Subtitle / Tagline Badge -->
+    <text y="24" font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="9" letter-spacing="0.22em" fill="#64748B">PRIVATE FINANCIAL INTELLIGENCE</text>
+    
+    <!-- Verified Live Status Dot -->
+    <circle cx="282" cy="-8" r="3.5" fill="#059669" />
+  </g>
+</svg>

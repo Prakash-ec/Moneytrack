@@ -9,7 +9,7 @@ import {
   Trash2,
   Wallet,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/Badge'
@@ -56,6 +56,7 @@ export function BankAccountsPage() {
 
   // Recalculating state
   const [recalculatingId, setRecalculatingId] = useState<number | null>(null)
+  const [reconcilingId, setReconcilingId] = useState<number | null>(null)
 
   // Delete state
   const [deleteTarget, setDeleteTarget] = useState<BankAccount | null>(null)
@@ -64,12 +65,22 @@ export function BankAccountsPage() {
   // Query
   const accountsQuery = useApiQuery(['bank-accounts'], () => api.listBankAccounts(true))
   const accounts = accountsQuery.data?.items ?? []
-  const consolidatedPaise =
+  const rawConsolidated =
     accountsQuery.data?.consolidated_balance_paise ??
     (accountsQuery.data as any)?.total_balance_paise ??
     0
   const reportedPaise = accountsQuery.data?.total_reported_balance_paise ?? 0
-  const discrepancyPaise = reportedPaise - consolidatedPaise
+  const consolidatedPaise = rawConsolidated !== 0 ? rawConsolidated : (reportedPaise || 0)
+  const discrepancyPaise = reportedPaise - (rawConsolidated || reportedPaise)
+
+  // Auto-refresh when SMS arrives or sync finishes
+  useEffect(() => {
+    const handleSmsChanged = () => {
+      accountsQuery.refetch()
+    }
+    window.addEventListener('moneytrack:sms-changed', handleSmsChanged)
+    return () => window.removeEventListener('moneytrack:sms-changed', handleSmsChanged)
+  }, [accountsQuery])
 
   const openCreateDialog = () => {
     setEditingAccount(null)
@@ -158,6 +169,24 @@ export function BankAccountsPage() {
       })
     } finally {
       setRecalculatingId(null)
+    }
+  }
+
+  const handleReconcile = async (id: number) => {
+    setReconcilingId(id)
+    try {
+      await api.reconcileBankAccount(id)
+      showToast({ title: 'Account Reconciled', description: 'Opening balance calibrated to match bank statement.' })
+      accountsQuery.refetch()
+      window.dispatchEvent(new CustomEvent('moneytrack:sms-changed'))
+    } catch (err) {
+      showToast({
+        title: 'Reconciliation Failed',
+        description: err instanceof Error ? err.message : 'Error reconciling balance.',
+        variant: 'error',
+      })
+    } finally {
+      setReconcilingId(null)
     }
   }
 
@@ -326,7 +355,7 @@ export function BankAccountsPage() {
                         Current calculated balance
                       </span>
                       <span className="text-xl sm:text-2xl font-semibold text-text font-mono tabular-nums">
-                        {formatINR(account.current_balance_paise)}
+                        {formatINR(account.current_balance_paise || account.last_reported_balance_paise || 0)}
                       </span>
                     </div>
 
@@ -364,16 +393,30 @@ export function BankAccountsPage() {
                 </div>
 
                 {/* Account Actions Bar */}
-                <div className="mt-5 pt-3 border-t border-border flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleRecalculate(account.id)}
-                    disabled={recalculatingId === account.id}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 ${recalculatingId === account.id ? 'animate-spin' : ''}`} aria-hidden="true" />
-                    <span>Recalculate</span>
-                  </button>
+                <div className="mt-5 pt-3 border-t border-border flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleRecalculate(account.id)}
+                      disabled={recalculatingId === account.id}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${recalculatingId === account.id ? 'animate-spin' : ''}`} aria-hidden="true" />
+                      <span>Recalculate</span>
+                    </button>
+                    {!isReconciled && account.last_reported_balance_paise != null && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={reconcilingId === account.id}
+                        onClick={() => handleReconcile(account.id)}
+                        className="text-xs h-7 px-2.5"
+                      >
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        <span>{reconcilingId === account.id ? 'Reconciling...' : 'Reconcile with SMS'}</span>
+                      </Button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1">
                     <Button

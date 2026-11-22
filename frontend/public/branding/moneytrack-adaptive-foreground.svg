@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108" fill="none">
+  <defs>
+    <radialGradient id="fgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.32" />
+      <stop offset="60%" stop-color="#4F46E5" stop-opacity="0.10" />
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="fgLeft" x1="130" y1="360" x2="256" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4338CA" />
+      <stop offset="50%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#818CF8" />
+    </linearGradient>
+    <linearGradient id="fgGrowth" x1="230" y1="280" x2="380" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="45%" stop-color="#3B82F6" />
+      <stop offset="80%" stop-color="#06B6D4" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+    <linearGradient id="fgOrbit" x1="90" y1="400" x2="420" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.15" />
+      <stop offset="30%" stop-color="#4F46E5" stop-opacity="0.75" />
+      <stop offset="70%" stop-color="#06B6D4" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.95" />
+    </linearGradient>
+    <radialGradient id="fgCore" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="1" />
+      <stop offset="50%" stop-color="#6366F1" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Scale and center symbol inside the 72dp safe circular zone (center=54,54) -->
+  <g transform="translate(54, 54) scale(0.122) translate(-256, -256)">
+    <!-- Ambient Glow -->
+    <circle cx="256" cy="256" r="230" fill="url(#fgGlow)" />
+
+    <!-- Orbit Tracking Arc -->
+    <path
+      d="M 126 386 A 184 184 0 1 1 396 366"
+      stroke="url(#fgOrbit)"
+      stroke-width="14"
+      stroke-linecap="round"
+      opacity="0.85"
+    />
+    <circle cx="396" cy="366" r="8" fill="#10B981" />
+    <circle cx="396" cy="366" r="14" fill="#10B981" opacity="0.3" />
+
+    <!-- Left Anchor & Arch -->
+    <path
+      d="M 148 360 V 208 C 148 181.5 169.5 160 196 160 C 211 160 224.5 167 233.5 178 L 256 208 L 221 254 L 196 220 C 190.5 212.5 180 216.5 180 225.5 V 360 C 180 366.6 174.6 372 168 372 L 160 372 C 153.4 372 148 366.6 148 360 Z"
+      fill="url(#fgLeft)"
+    />
+
+    <!-- Right Growth Vector Arrow -->
+    <path
+      d="M 233.5 238 L 256 208 L 278.5 238 L 332 168 C 341 156.5 354.5 150 369.5 150 C 379.5 150 388.5 153 396 158.5 L 396 112 C 396 105.4 401.4 100 408 100 L 412 100 C 418.6 100 424 105.4 424 112 L 424 196 C 424 202.6 418.6 208 412 208 L 328 208 C 321.4 208 316 202.6 316 196 L 316 192 C 316 185.4 321.4 180 328 180 L 374 180 C 368 174 359 170 349 170 C 341.5 170 334.5 173.5 329.5 179.5 L 278 248 L 278 360 C 278 366.6 272.6 372 266 372 L 258 372 C 251.4 372 246 366.6 246 360 V 276 L 233.5 238 Z"
+      fill="url(#fgGrowth)"
+    />
+
+    <!-- Central Fulcrum -->
+    <circle cx="256" cy="242" r="14" fill="#0B0F19" />
+    <circle cx="256" cy="242" r="10" fill="url(#fgCore)" />
+    <circle cx="256" cy="242" r="4" fill="#FFFFFF" />
+  </g>
+</svg>

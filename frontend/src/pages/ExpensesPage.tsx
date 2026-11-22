@@ -335,7 +335,7 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
         <select
           value={typeId ? String(typeId) : ''}
           onChange={(e) => updateParam('type', e.target.value || null)}
-          className="period-picker text-xs bg-surface cursor-pointer"
+          className="period-picker text-base sm:text-xs bg-surface cursor-pointer"
           aria-label="Filter by expense type"
         >
           <option value="">All expense types</option>
@@ -349,7 +349,7 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
         <select
           value={payment}
           onChange={(e) => updateParam('method', e.target.value || null)}
-          className="period-picker text-xs bg-surface cursor-pointer"
+          className="period-picker text-base sm:text-xs bg-surface cursor-pointer"
           aria-label="Filter by payment method"
         >
           <option value="">All payment methods</option>
@@ -363,7 +363,7 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
         <select
           value={sort}
           onChange={(e) => updateParam('sort', e.target.value)}
-          className="period-picker text-xs bg-surface cursor-pointer"
+          className="period-picker text-base sm:text-xs bg-surface cursor-pointer"
           aria-label="Sort order"
         >
           {SORT_OPTIONS.map((s) => (

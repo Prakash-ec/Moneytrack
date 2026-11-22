@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%" fill="none" aria-label="MoneyTrack Squircle App Icon">
+  <defs>
+    <!-- Background Gradient for Squircle -->
+    <linearGradient id="sqBg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#161B26" />
+      <stop offset="60%" stop-color="#0E131F" />
+      <stop offset="100%" stop-color="#070A11" />
+    </linearGradient>
+
+    <!-- Border Highlight -->
+    <linearGradient id="sqBorder" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.35" />
+      <stop offset="40%" stop-color="#6366F1" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#232B3B" stop-opacity="0.6" />
+    </linearGradient>
+
+    <!-- Ambient Glow inside Squircle -->
+    <radialGradient id="sqGlow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.28" />
+      <stop offset="60%" stop-color="#3B82F6" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#0B0F19" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Left Ribbon -->
+    <linearGradient id="sqLeftRibbon" x1="150" y1="360" x2="256" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="40%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#818CF8" />
+    </linearGradient>
+
+    <!-- Right Growth Ribbon -->
+    <linearGradient id="sqGrowthRibbon" x1="230" y1="280" x2="380" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="45%" stop-color="#3B82F6" />
+      <stop offset="80%" stop-color="#06B6D4" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+
+    <!-- Orbit Tracking Gradient -->
+    <linearGradient id="sqOrbitGrad" x1="120" y1="400" x2="400" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.2" />
+      <stop offset="40%" stop-color="#4F46E5" stop-opacity="0.85" />
+      <stop offset="75%" stop-color="#06B6D4" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+
+    <radialGradient id="sqCore" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="50%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#4338CA" />
+    </radialGradient>
+
+    <filter id="iconShadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect x="8" y="8" width="496" height="496" rx="116" ry="116" fill="url(#sqBg)" />
+  <!-- Squircle Border -->
+  <rect x="8" y="8" width="496" height="496" rx="116" ry="116" fill="none" stroke="url(#sqBorder)" stroke-width="4" />
+  
+  <!-- Ambient Internal Glow -->
+  <rect x="12" y="12" width="488" height="488" rx="112" ry="112" fill="url(#sqGlow)" />
+
+  <!-- Orbit Tracking Arc -->
+  <path
+    d="M 132 378 A 176 176 0 1 1 390 360"
+    stroke="url(#sqOrbitGrad)"
+    stroke-width="14"
+    stroke-linecap="round"
+    opacity="0.9"
+  />
+
+  <!-- Active Tracking Sensor Node -->
+  <circle cx="390" cy="360" r="8" fill="#10B981" />
+  <circle cx="390" cy="360" r="14" fill="#10B981" opacity="0.3" />
+
+  <!-- Core M Symbol Group -->
+  <g filter="url(#iconShadow)">
+    <!-- Left Anchor & Arch -->
+    <path
+      d="M 152 356
+         V 212
+         C 152 187 172 166 197 166
+         C 211.5 166 224.5 172.5 233 183.5
+         L 256 213
+         L 222 258
+         L 198 225
+         C 192.5 217.5 182 221.5 182 230.5
+         V 356
+         C 182 362 177 367 171 367
+         L 163 367
+         C 157 367 152 362 152 356 Z"
+      fill="url(#sqLeftRibbon)"
+    />
+
+    <!-- Right Growth Vector Arrow -->
+    <path
+      d="M 233 241
+         L 256 213
+         L 278.5 241
+         L 329 174
+         C 338 162.5 351.5 156 366.5 156
+         C 376.5 156 385.5 159 392.5 164.5
+         L 392.5 120
+         C 392.5 113.5 398 108 404.5 108
+         L 407.5 108
+         C 414 108 419.5 113.5 419.5 120
+         L 419.5 200
+         C 419.5 206.5 414 212 407.5 212
+         L 327.5 212
+         C 321 212 315.5 206.5 315.5 200
+         L 315.5 196
+         C 315.5 189.5 321 184 327.5 184
+         L 371 184
+         C 365 178 356.5 174 347 174
+         C 340 174 333 177.5 328 183.5
+         L 277 251
+         V 356
+         C 277 362 272 367 266 367
+         L 258 367
+         C 252 367 247 362 247 356
+         V 277
+         L 233 241 Z"
+      fill="url(#sqGrowthRibbon)"
+    />
+
+    <!-- Central Fulcrum Intelligence Nexus -->
+    <circle cx="256" cy="245" r="14" fill="#0B0F19" />
+    <circle cx="256" cy="245" r="10" fill="url(#sqCore)" />
+    <circle cx="256" cy="245" r="4" fill="#FFFFFF" />
+  </g>
+</svg>
