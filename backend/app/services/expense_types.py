@@ -27,16 +27,15 @@ def name_key(name: str) -> str:
     return " ".join(name.split()).casefold()
 
 
-def _stats_subquery():
-    return (
-        select(
-            Expense.expense_type_id.label("type_id"),
-            func.coalesce(func.sum(Expense.amount_paise), 0).label("total_paise"),
-            func.count(Expense.id).label("transaction_count"),
-        )
-        .group_by(Expense.expense_type_id)
-        .subquery()
+def _stats_subquery(user_id: int | None = None):
+    stmt = select(
+        Expense.expense_type_id.label("type_id"),
+        func.coalesce(func.sum(Expense.amount_paise), 0).label("total_paise"),
+        func.count(Expense.id).label("transaction_count"),
     )
+    if user_id is not None:
+        stmt = stmt.where(Expense.user_id == user_id)
+    return stmt.group_by(Expense.expense_type_id).subquery()
 
 
 def _to_read(model: ExpenseType, total_paise: int, transaction_count: int) -> ExpenseTypeRead:
@@ -46,26 +45,29 @@ def _to_read(model: ExpenseType, total_paise: int, transaction_count: int) -> Ex
     return item
 
 
-def get_expense_type(db: Session, type_id: int) -> ExpenseType:
+def get_expense_type(db: Session, type_id: int, user_id: int | None = None) -> ExpenseType:
     model = db.get(ExpenseType, type_id)
     if model is None:
+        raise NotFoundError("Expense type not found.")
+    if user_id is not None and model.user_id is not None and model.user_id != user_id:
         raise NotFoundError("Expense type not found.")
     return model
 
 
-def expense_type_detail(db: Session, type_id: int) -> ExpenseTypeRead:
-    model = get_expense_type(db, type_id)
+def expense_type_detail(db: Session, type_id: int, user_id: int | None = None) -> ExpenseTypeRead:
+    model = get_expense_type(db, type_id, user_id=user_id)
+    exp_cond = [Expense.expense_type_id == model.id]
+    if user_id is not None:
+        exp_cond.append(Expense.user_id == user_id)
     total = int(
         db.scalar(
-            select(func.coalesce(func.sum(Expense.amount_paise), 0)).where(
-                Expense.expense_type_id == model.id
-            )
+            select(func.coalesce(func.sum(Expense.amount_paise), 0)).where(*exp_cond)
         )
         or 0
     )
     count = int(
         db.scalar(
-            select(func.count(Expense.id)).where(Expense.expense_type_id == model.id)
+            select(func.count(Expense.id)).where(*exp_cond)
         )
         or 0
     )
@@ -75,18 +77,24 @@ def expense_type_detail(db: Session, type_id: int) -> ExpenseTypeRead:
 def list_expense_types(
     db: Session,
     *,
+    user_id: int | None = None,
     search: str | None = None,
     archived: str = "exclude",
     page: int = 1,
     page_size: int = 50,
 ) -> ExpenseTypeList:
-    stats = _stats_subquery()
+    stats = _stats_subquery(user_id=user_id)
     stmt = (
         select(ExpenseType, stats.c.total_paise, stats.c.transaction_count)
         .outerjoin(stats, stats.c.type_id == ExpenseType.id)
         .order_by(ExpenseType.is_archived.asc(), func.lower(ExpenseType.name).asc())
     )
     count_stmt = select(func.count(ExpenseType.id))
+
+    if user_id is not None:
+        tenant_cond = or_(ExpenseType.user_id == user_id, ExpenseType.user_id.is_(None))
+        stmt = stmt.where(tenant_cond)
+        count_stmt = count_stmt.where(tenant_cond)
 
     if archived == "exclude":
         stmt = stmt.where(ExpenseType.is_archived.is_(False))
@@ -119,8 +127,11 @@ def list_expense_types(
     )
 
 
-def create_expense_type(db: Session, payload: ExpenseTypeCreate) -> ExpenseTypeRead:
+def create_expense_type(
+    db: Session, payload: ExpenseTypeCreate, user_id: int | None = None
+) -> ExpenseTypeRead:
     model = ExpenseType(
+        user_id=user_id,
         name=payload.name,
         name_key=name_key(payload.name),
         description=payload.description,
@@ -138,8 +149,14 @@ def create_expense_type(db: Session, payload: ExpenseTypeCreate) -> ExpenseTypeR
     return _to_read(model, 0, 0)
 
 
-def update_expense_type(db: Session, type_id: int, payload: ExpenseTypeUpdate) -> ExpenseTypeRead:
-    model = get_expense_type(db, type_id)
+def update_expense_type(
+    db: Session, type_id: int, payload: ExpenseTypeUpdate, user_id: int | None = None
+) -> ExpenseTypeRead:
+    model = get_expense_type(db, type_id, user_id=user_id)
+    if user_id is not None and model.user_id is None:
+        raise ConflictError("System default expense types cannot be modified.")
+    if user_id is not None and model.user_id != user_id:
+        raise ConflictError("You do not have permission to modify this expense type.")
     fields = payload.model_fields_set
 
     if "name" in fields:
@@ -163,47 +180,57 @@ def update_expense_type(db: Session, type_id: int, payload: ExpenseTypeUpdate) -
         raise ConflictError("An expense type with this name already exists.") from exc
     db.refresh(model)
 
+    exp_cond = [Expense.expense_type_id == model.id]
+    if user_id is not None:
+        exp_cond.append(Expense.user_id == user_id)
     total = int(
         db.scalar(
-            select(func.coalesce(func.sum(Expense.amount_paise), 0)).where(
-                Expense.expense_type_id == model.id
-            )
+            select(func.coalesce(func.sum(Expense.amount_paise), 0)).where(*exp_cond)
         )
         or 0
     )
     count = int(
         db.scalar(
-            select(func.count(Expense.id)).where(Expense.expense_type_id == model.id)
+            select(func.count(Expense.id)).where(*exp_cond)
         )
         or 0
     )
     return _to_read(model, total, count)
 
 
-def set_archived(db: Session, type_id: int, archived: bool) -> ExpenseTypeRead:
-    model = get_expense_type(db, type_id)
+def set_archived(
+    db: Session, type_id: int, archived: bool, user_id: int | None = None
+) -> ExpenseTypeRead:
+    model = get_expense_type(db, type_id, user_id=user_id)
+    if user_id is not None and model.user_id is not None and model.user_id != user_id:
+        raise ConflictError("You do not have permission to archive this expense type.")
     model.is_archived = archived
     db.commit()
     db.refresh(model)
+    exp_cond = [Expense.expense_type_id == model.id]
+    if user_id is not None:
+        exp_cond.append(Expense.user_id == user_id)
     total = int(
         db.scalar(
-            select(func.coalesce(func.sum(Expense.amount_paise), 0)).where(
-                Expense.expense_type_id == model.id
-            )
+            select(func.coalesce(func.sum(Expense.amount_paise), 0)).where(*exp_cond)
         )
         or 0
     )
     count = int(
         db.scalar(
-            select(func.count(Expense.id)).where(Expense.expense_type_id == model.id)
+            select(func.count(Expense.id)).where(*exp_cond)
         )
         or 0
     )
     return _to_read(model, total, count)
 
 
-def delete_expense_type(db: Session, type_id: int) -> None:
-    model = get_expense_type(db, type_id)
+def delete_expense_type(db: Session, type_id: int, user_id: int | None = None) -> None:
+    model = get_expense_type(db, type_id, user_id=user_id)
+    if user_id is not None and model.user_id is None:
+        raise ConflictError("System default expense types cannot be deleted.")
+    if user_id is not None and model.user_id != user_id:
+        raise ConflictError("You do not have permission to delete this expense type.")
     count = int(
         db.scalar(
             select(func.count(Expense.id)).where(Expense.expense_type_id == model.id)
@@ -219,36 +246,36 @@ def delete_expense_type(db: Session, type_id: int) -> None:
 
 
 def expense_type_summary(
-    db: Session, type_id: int, start: date, end: date
+    db: Session, type_id: int, start: date, end: date, user_id: int | None = None
 ) -> ExpenseTypePeriodSummary:
-    model = get_expense_type(db, type_id)
-    expenses = list(
-        db.scalars(
-            select(Expense)
-            .where(
-                Expense.expense_type_id == type_id,
-                Expense.expense_date >= start,
-                Expense.expense_date <= end,
-            )
-            .order_by(Expense.expense_date.asc(), Expense.id.asc())
-        ).all()
+    model = get_expense_type(db, type_id, user_id=user_id)
+    query = (
+        select(Expense)
+        .where(
+            Expense.expense_type_id == type_id,
+            Expense.expense_date >= start,
+            Expense.expense_date <= end,
+        )
     )
+    if user_id is not None:
+        query = query.where(Expense.user_id == user_id)
+    expenses = list(db.scalars(query.order_by(Expense.expense_date.asc(), Expense.id.asc())).all())
     total = sum(item.amount_paise for item in expenses)
     count = len(expenses)
     highest = max(expenses, key=lambda item: (item.amount_paise, item.expense_date, item.id), default=None)
     lowest = min(expenses, key=lambda item: (item.amount_paise, item.expense_date, item.id), default=None)
 
     previous_start, previous_end = previous_period(start, end)
-    previous_total = int(
-        db.scalar(
-            select(func.coalesce(func.sum(Expense.amount_paise), 0)).where(
-                Expense.expense_type_id == type_id,
-                Expense.expense_date >= previous_start,
-                Expense.expense_date <= previous_end,
-            )
+    prev_query = (
+        select(func.coalesce(func.sum(Expense.amount_paise), 0)).where(
+            Expense.expense_type_id == type_id,
+            Expense.expense_date >= previous_start,
+            Expense.expense_date <= previous_end,
         )
-        or 0
     )
+    if user_id is not None:
+        prev_query = prev_query.where(Expense.user_id == user_id)
+    previous_total = int(db.scalar(prev_query) or 0)
     change = total - previous_total
     if previous_total == 0 and total == 0:
         direction = "none"

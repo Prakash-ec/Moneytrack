@@ -294,7 +294,8 @@ def test_multi_user_custom_type_name_key_coexistence(db_session: Session):
 # 4. P2-2: Concurrent First-Admin Registration Tests
 # =============================================================================
 
-def test_atomic_first_admin_registration_concurrency(db_session: Session):
+def test_atomic_first_admin_registration_concurrency(db_session: Session, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(auth_service.settings, "allow_registration", False)
     # Ensure clean users table
     db_session.query(User).delete()
     db_session.commit()

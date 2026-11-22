@@ -83,26 +83,27 @@ def test_registration_policy_and_system_types(monkeypatch):
         assert salary.user_id is None, "System default income type must remain user_id=None"
         assert custom_inc.user_id == user1.id, "Custom legacy income type must be claimed by owner"
 
-        # Setup status now: is_configured=True, allow_registration=False (by default)
+        # Setup status now: is_configured=True, allow_registration=True (by default)
         status2 = get_setup_status(db)
         assert status2.is_configured is True
-        assert status2.allow_registration is False
+        assert status2.allow_registration is True
 
-        # Attempt second user registration when allow_registration is False -> ConflictError
-        with pytest.raises(ConflictError, match="Registration is disabled"):
-            register_user(
-                db, UserCreate(email="attacker@example.com", password="AttackerPassword123!")
-            )
-
-        # Now simulate allow_registration=True
-        from app.core.config import get_settings
-        monkeypatch.setattr(get_settings(), "allow_registration", True)
-
-        status3 = get_setup_status(db)
-        assert status3.allow_registration is True
-
+        # User 2 can register because allow_registration is enabled
         user2, token2 = register_user(
             db, UserCreate(email="user2@example.com", password="SecondPassword123!")
         )
         assert user2.is_superuser is False
         assert user2.email == "user2@example.com"
+
+        # Now simulate when instance administrator sets allow_registration=False
+        from app.core.config import get_settings
+        monkeypatch.setattr(get_settings(), "allow_registration", False)
+
+        status3 = get_setup_status(db)
+        assert status3.allow_registration is False
+
+        # Attempt registration when allow_registration is False -> ConflictError
+        with pytest.raises(ConflictError, match="Registration is disabled"):
+            register_user(
+                db, UserCreate(email="attacker@example.com", password="AttackerPassword123!")
+            )

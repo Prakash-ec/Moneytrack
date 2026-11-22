@@ -30,7 +30,12 @@ def list_expense_types(
     db: Session = Depends(get_db),
 ) -> ExpenseTypeList:
     return service.list_expense_types(
-        db, search=search, archived=archived, page=page, page_size=page_size
+        db,
+        user_id=current_user.id,
+        search=search,
+        archived=archived,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -40,7 +45,7 @@ def create_expense_type(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpenseTypeRead:
-    return service.create_expense_type(db, payload)
+    return service.create_expense_type(db, payload, user_id=current_user.id)
 
 
 @router.get("/{type_id}", response_model=ExpenseTypeRead, summary="Get an expense type")
@@ -49,7 +54,7 @@ def get_expense_type(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpenseTypeRead:
-    return service.expense_type_detail(db, type_id)
+    return service.expense_type_detail(db, type_id, user_id=current_user.id)
 
 
 @router.patch("/{type_id}", response_model=ExpenseTypeRead, summary="Edit an expense type")
@@ -60,7 +65,7 @@ def update_expense_type(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpenseTypeRead:
-    return service.update_expense_type(db, type_id, payload)
+    return service.update_expense_type(db, type_id, payload, user_id=current_user.id)
 
 
 @router.post("/{type_id}/archive", response_model=ExpenseTypeRead, summary="Archive an expense type")
@@ -69,7 +74,7 @@ def archive_expense_type(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpenseTypeRead:
-    return service.set_archived(db, type_id, True)
+    return service.set_archived(db, type_id, True, user_id=current_user.id)
 
 
 @router.post("/{type_id}/unarchive", response_model=ExpenseTypeRead, summary="Restore an archived type")
@@ -78,7 +83,7 @@ def unarchive_expense_type(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpenseTypeRead:
-    return service.set_archived(db, type_id, False)
+    return service.set_archived(db, type_id, False, user_id=current_user.id)
 
 
 @router.delete(
@@ -91,7 +96,7 @@ def delete_expense_type(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    service.delete_expense_type(db, type_id)
+    service.delete_expense_type(db, type_id, user_id=current_user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -108,4 +113,4 @@ def expense_type_summary(
     db: Session = Depends(get_db),
 ) -> ExpenseTypePeriodSummary:
     start, end = resolve_period(start_date, end_date)
-    return service.expense_type_summary(db, type_id, start, end)
+    return service.expense_type_summary(db, type_id, start, end, user_id=current_user.id)

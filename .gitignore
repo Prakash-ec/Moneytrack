@@ -36,6 +36,13 @@ backend/data/*.sqlite
 backend/data/*.sqlite-*
 backend/data/*.json
 backend/data/*.csv
+backups/
+*.dump
+*.tar
+search_results.txt
+release/
+scripts/*.txt
+scripts/*.json
 
 # Node and frontend build output
 node_modules/

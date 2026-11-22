@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     secret_key: str = ""
     access_token_expire_minutes: int = 60 * 24 * 30  # 30 days
     auth_required: bool = True
-    allow_registration: bool = False
+    allow_registration: bool = True
 
     # SQL performance profiling (development-only, disabled by default in production)
     sql_profiling_enabled: bool = False

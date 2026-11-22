@@ -123,6 +123,39 @@ export function LoginPage({ initialMode }: LoginPageProps) {
             </div>
           )}
 
+          {!isInitialSetup && allowRegistration && (
+            <div className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1 border border-line text-center text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null)
+                  setIsRegisterMode(false)
+                }}
+                className={`rounded-lg py-2 transition-all ${
+                  !isRegisterMode
+                    ? 'bg-surface text-ink shadow-sm'
+                    : 'text-subtle hover:text-ink'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null)
+                  setIsRegisterMode(true)
+                }}
+                className={`rounded-lg py-2 transition-all ${
+                  isRegisterMode
+                    ? 'bg-surface text-ink shadow-sm'
+                    : 'text-subtle hover:text-ink'
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+          )}
+
           <form className="space-y-4" onSubmit={handleSubmit}>
             {isRegisterMode && (
               <div>
