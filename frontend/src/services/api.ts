@@ -569,7 +569,10 @@ export const api = {
   reconcileBankAccount: (id: number) =>
     request<BankAccount>(`/bank-accounts/${id}/reconcile`, { method: 'POST' }),
   reportBankBalance: (id: number, balancePaise: number, reportedAt?: string) =>
-    request<BankAccount>(`/bank-accounts/${id}/report-balance`, jsonBody({ balance_paise: balancePaise, reported_at: reportedAt })),
+    request<BankAccount>(
+      `/bank-accounts/${id}/report-balance?reported_balance_paise=${balancePaise}${reportedAt ? `&reported_at=${reportedAt}` : ``}`,
+      { method: 'POST' },
+    ),
   getBankReconciliation: () =>
     request<AccountReconciliation[]>('/bank-accounts/reconciliation/summary'),
 
@@ -687,8 +690,15 @@ export async function downloadExport(kind: 'csv' | 'json'): Promise<void> {
   const path = kind === 'csv' ? '/export/expenses.csv' : '/export/backup.json'
   let response: Response
   try {
+    const token =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem('moneytrack_auth_token')
+        : null
     response = await fetch(`${apiBase()}${path}`, {
-      headers: { Accept: kind === 'csv' ? 'text/csv' : 'application/json' },
+      headers: {
+        Accept: kind === 'csv' ? 'text/csv' : 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     })
   } catch {
     throw new ApiError('Could not reach the MoneyTrack API.', 0)

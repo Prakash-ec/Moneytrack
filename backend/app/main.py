@@ -104,6 +104,48 @@ def seed_default_expense_types() -> None:
         logger.warning("Could not seed default expense types on startup: %s", exc)
 
 
+def seed_default_income_types() -> None:
+    """Ensure standard default income types exist without overriding existing custom types."""
+    from app.db.session import SessionLocal
+    from app.models.income_type import IncomeType
+    from app.services.expense_types import name_key
+
+    default_types = [
+        {"name": "Salary", "icon": "briefcase", "color": "#16845B"},
+        {"name": "Freelance", "icon": "laptop", "color": "#0EA5E9"},
+        {"name": "Business", "icon": "building", "color": "#6366F1"},
+        {"name": "Investment", "icon": "trending-up", "color": "#10B981"},
+        {"name": "Rental", "icon": "home", "color": "#D97706"},
+        {"name": "Gift", "icon": "gift", "color": "#EC4899"},
+        {"name": "Refunds", "icon": "rotate-ccw", "color": "#14B8A6"},
+        {"name": "Other Income", "icon": "wallet", "color": "#64748B"},
+    ]
+
+    try:
+        with SessionLocal() as db:
+            existing_keys = {t.name_key for t in db.query(IncomeType).all()}
+            added = 0
+            for item in default_types:
+                k = name_key(item["name"])
+                if k not in existing_keys:
+                    db.add(
+                        IncomeType(
+                            name=item["name"],
+                            name_key=k,
+                            icon=item["icon"],
+                            color=item["color"],
+                            is_archived=False,
+                        )
+                    )
+                    existing_keys.add(k)
+                    added += 1
+            if added > 0:
+                db.commit()
+                logger.info("Seeded %d standard default income types.", added)
+    except Exception as exc:
+        logger.warning("Could not seed default income types on startup: %s", exc)
+
+
 async def keep_alive_worker() -> None:
     """Periodic background task that pings the public Render URL to prevent idling.
     Render Free tier spins down web services after 15 minutes of inactivity.
@@ -141,6 +183,7 @@ async def keep_alive_worker() -> None:
 async def lifespan(app: FastAPI):
     run_startup_migrations()
     seed_default_expense_types()
+    seed_default_income_types()
 
     if settings.sql_profiling_enabled:
         from app.core.profiler import attach_profiling_listeners

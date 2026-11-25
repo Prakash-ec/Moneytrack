@@ -1,5 +1,5 @@
 import {
-  Calendar,
+  CalendarDays,
   Camera,
   ChevronLeft,
   ChevronRight,
@@ -7,6 +7,7 @@ import {
   Plus,
   Receipt,
   Search,
+  SlidersHorizontal,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -27,6 +28,7 @@ import { useDataRefresh } from '@/providers/RefreshProvider'
 import { useToast } from '@/providers/ToastProvider'
 import { api, downloadExport } from '@/services/api'
 import type { Expense, SortOrder } from '@/types/api'
+import { cn } from '@/utils/cn'
 import { formatINR, parseRupeesToPaise } from '@/utils/currency'
 import { formatDate } from '@/utils/dates'
 import { PAYMENT_METHOD_OPTIONS } from '@/utils/typeOptions'
@@ -41,6 +43,10 @@ const SORT_OPTIONS: Array<{ value: SortOrder; label: string }> = [
 
 const VALID_SORTS = new Set(SORT_OPTIONS.map((option) => option.value))
 
+function selectClass() {
+  return 'h-9 max-w-full rounded-lg border border-border bg-surface px-2.5 text-xs text-text outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20'
+}
+
 export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Expenses')
   const period = usePeriod()
@@ -51,30 +57,13 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
-
-  const handleExportCsv = async () => {
-    setExporting(true)
-    try {
-      await downloadExport('csv')
-      showToast({
-        title: 'Export successful',
-        description: 'Your expenses CSV file was downloaded.',
-      })
-    } catch (err) {
-      showToast({
-        title: 'Export failed',
-        description: err instanceof Error ? err.message : 'Could not export expenses.',
-        variant: 'error',
-      })
-    } finally {
-      setExporting(false)
-    }
-  }
+  const [showFilters, setShowFilters] = useState(false)
 
   const q = searchParams.get('q') ?? ''
   const typeParam = searchParams.get('type')
   const typeId = typeParam && /^\d+$/.test(typeParam) ? Number(typeParam) : undefined
   const payment = searchParams.get('method') ?? ''
+  const category = searchParams.get('category') ?? ''
   const sortParam = searchParams.get('sort')
   const sort: SortOrder =
     sortParam && VALID_SORTS.has(sortParam as SortOrder) ? (sortParam as SortOrder) : 'date_desc'
@@ -83,45 +72,25 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   const [searchInput, setSearchInput] = useState(q)
   const debouncedSearch = useDebouncedValue(searchInput, 300)
-
   const [minAmount, setMinAmount] = useState(searchParams.get('min_amount') ?? '')
   const [maxAmount, setMaxAmount] = useState(searchParams.get('max_amount') ?? '')
-  const [category, setCategory] = useState(searchParams.get('category') ?? '')
+  const debouncedMin = useDebouncedValue(minAmount, 350)
+  const debouncedMax = useDebouncedValue(maxAmount, 350)
 
-  const debouncedMin = useDebouncedValue(minAmount, 300)
-  const debouncedMax = useDebouncedValue(maxAmount, 300)
-
-  const minRaw = debouncedMin.trim()
-  const maxRaw = debouncedMax.trim()
-  let minPaise: number | null = null
-  let maxPaise: number | null = null
-  let amountError: string | null = null
-  if (minRaw) {
-    const v = parseRupeesToPaise(minRaw)
-    if (v === null) amountError = 'Enter a valid minimum amount.'
-    else minPaise = v
-  }
-  if (maxRaw) {
-    const v = parseRupeesToPaise(maxRaw)
-    if (v === null) amountError = 'Enter a valid maximum amount.'
-    else maxPaise = v
-  }
-  if (!amountError && minPaise !== null && maxPaise !== null && minPaise > maxPaise) {
-    amountError = 'Minimum amount cannot be greater than maximum amount.'
-  }
+  const minPaise = debouncedMin.trim() ? parseRupeesToPaise(debouncedMin) : null
+  const maxPaise = debouncedMax.trim() ? parseRupeesToPaise(debouncedMax) : null
+  const amountError =
+    debouncedMin.trim() && minPaise === null
+      ? 'Enter a valid minimum amount.'
+      : debouncedMax.trim() && maxPaise === null
+        ? 'Enter a valid maximum amount.'
+        : minPaise !== null && maxPaise !== null && minPaise > maxPaise
+          ? 'Minimum cannot be greater than maximum.'
+          : null
 
   useEffect(() => {
     setSearchInput(q)
   }, [q])
-  useEffect(() => {
-    setMinAmount(searchParams.get('min_amount') ?? '')
-  }, [searchParams.get('min_amount')])
-  useEffect(() => {
-    setMaxAmount(searchParams.get('max_amount') ?? '')
-  }, [searchParams.get('max_amount')])
-  useEffect(() => {
-    setCategory(searchParams.get('category') ?? '')
-  }, [searchParams.get('category')])
 
   useEffect(() => {
     const trimmed = debouncedSearch.trim()
@@ -135,22 +104,38 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   useEffect(() => {
     if (amountError) return
+    const nextMin = debouncedMin.trim()
+    const nextMax = debouncedMax.trim()
+    if (nextMin === (searchParams.get('min_amount') ?? '') && nextMax === (searchParams.get('max_amount') ?? '')) {
+      return
+    }
     const next = new URLSearchParams(searchParams)
-    if (minPaise !== null) next.set('min_amount', String(minPaise))
+    if (nextMin) next.set('min_amount', nextMin)
     else next.delete('min_amount')
-    if (maxPaise !== null) next.set('max_amount', String(maxPaise))
+    if (nextMax) next.set('max_amount', nextMax)
     else next.delete('max_amount')
     next.delete('page')
     setSearchParams(next, { replace: true })
-  }, [debouncedMin, debouncedMax, amountError, minPaise, maxPaise, searchParams, setSearchParams])
+  }, [debouncedMin, debouncedMax, amountError, searchParams, setSearchParams])
 
-  useEffect(() => {
+  const updateParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams)
-    if (category) next.set('category', category)
-    else next.delete('category')
-    next.delete('page')
+    if (value) next.set(key, value)
+    else next.delete(key)
+    if (key !== 'page') next.delete('page')
     setSearchParams(next, { replace: true })
-  }, [category, searchParams, setSearchParams])
+  }
+
+  const clearFilters = () => {
+    const next = new URLSearchParams(searchParams)
+    ;['q', 'type', 'method', 'category', 'min_amount', 'max_amount', 'sort', 'page', 'period', 'start', 'end'].forEach(
+      (key) => next.delete(key),
+    )
+    setSearchParams(next, { replace: true })
+    setSearchInput('')
+    setMinAmount('')
+    setMaxAmount('')
+  }
 
   const typesQuery = useApiQuery(['expense-types', 'filter'], () =>
     api.listExpenseTypes({ archived: 'include', page_size: 200 }),
@@ -186,70 +171,41 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
       }),
   )
 
-  const summaryQuery = useApiQuery(
-    ['expenses-summary', period.range.start, period.range.end],
-    () => api.analyticsSummary({ start_date: period.range.start, end_date: period.range.end }),
+  const summaryQuery = useApiQuery(['expenses-summary', period.range.start, period.range.end], () =>
+    api.analyticsSummary({ start_date: period.range.start, end_date: period.range.end }),
   )
 
   const data = expensesQuery.data
   const hasFilters = Boolean(
-    q || category || payment || typeId || minPaise !== null || maxPaise !== null ||
-      sort !== 'date_desc' || period.preset !== 'month',
+    q ||
+      category ||
+      payment ||
+      typeId ||
+      minPaise !== null ||
+      maxPaise !== null ||
+      sort !== 'date_desc' ||
+      period.preset !== 'month',
   )
 
   const groupedExpenses = useMemo(() => {
     if (!data?.items?.length) return []
-    const groupsMap = new Map<string, { subtotal: number; items: Expense[] }>()
-    for (const exp of data.items) {
-      const existing = groupsMap.get(exp.expense_date)
+    const groups = new Map<string, { subtotal: number; items: Expense[] }>()
+    for (const expense of data.items) {
+      const existing = groups.get(expense.expense_date)
       if (existing) {
-        existing.subtotal += exp.amount_paise
-        existing.items.push(exp)
+        existing.subtotal += expense.amount_paise
+        existing.items.push(expense)
       } else {
-        groupsMap.set(exp.expense_date, {
-          subtotal: exp.amount_paise,
-          items: [exp],
-        })
+        groups.set(expense.expense_date, { subtotal: expense.amount_paise, items: [expense] })
       }
     }
-
-    return Array.from(groupsMap.entries()).map(([date, val]) => ({
+    return Array.from(groups.entries()).map(([date, value]) => ({
       date,
       label: formatDate(date),
-      subtotalPaise: val.subtotal,
-      items: val.items,
+      subtotalPaise: value.subtotal,
+      items: value.items,
     }))
   }, [data?.items])
-
-  const updateParam = (key: string, value: string | null) => {
-    const next = new URLSearchParams(searchParams)
-    if (value) next.set(key, value)
-    else next.delete(key)
-    if (key !== 'page') next.delete('page')
-    setSearchParams(next, { replace: true })
-  }
-
-  const clearFilters = () => {
-    const next = new URLSearchParams(searchParams)
-    ;[
-      'q',
-      'type',
-      'method',
-      'category',
-      'min_amount',
-      'max_amount',
-      'sort',
-      'page',
-      'period',
-      'start',
-      'end',
-    ].forEach((key) => next.delete(key))
-    setSearchParams(next, { replace: true })
-    setSearchInput('')
-    setMinAmount('')
-    setMaxAmount('')
-    setCategory('')
-  }
 
   const goToPage = (nextPage: number) => {
     const next = new URLSearchParams(searchParams)
@@ -266,7 +222,7 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
       await api.deleteExpense(deleteTarget.id)
       showToast({
         title: 'Expense deleted',
-        description: `${formatINR(deleteTarget.amount_paise)} was removed.`,
+        description: `${formatINR(deleteTarget.amount_paise)} was removed from your ledger.`,
       })
       setDeleteTarget(null)
       invalidate()
@@ -281,133 +237,221 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
     }
   }
 
+  const handleExportCsv = async () => {
+    setExporting(true)
+    try {
+      await downloadExport('csv')
+      showToast({ title: 'Export ready', description: 'Your expenses CSV was downloaded.' })
+    } catch (err) {
+      showToast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Could not export expenses.',
+        variant: 'error',
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
-    <div className={embedded ? '' : 'page'}>
-      {!embedded && (
+    <div className={embedded ? '' : 'mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8'}>
+      {!embedded ? (
         <PageHeader
           eyebrow="Transactions"
           title="Expenses"
-          description="Search, review, and manage your transactions."
+          description="Every outflow, exact to the paise."
           actions={
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                onClick={handleExportCsv}
-                disabled={exporting}
-                className="hidden sm:inline-flex"
-                title="Download expenses as CSV spreadsheet"
-              >
+            <>
+              <Button variant="secondary" onClick={handleExportCsv} disabled={exporting} className="hidden sm:inline-flex">
                 <Download className="h-4 w-4" aria-hidden="true" />
-                <span>{exporting ? 'Exporting…' : 'Export CSV'}</span>
+                {exporting ? 'Exporting…' : 'Export CSV'}
               </Button>
               <Button variant="secondary" onClick={() => openScanReceipt()}>
                 <Camera className="h-4 w-4" aria-hidden="true" />
-                <span>Scan receipt</span>
+                <span className="hidden sm:inline">Scan</span>
               </Button>
               <Button variant="primary" onClick={() => openCreate()}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                <span>Add expense</span>
+                Add expense
               </Button>
-            </div>
+            </>
           }
         />
-      )}
+      ) : null}
 
-      <div className="filter-bar">
-        <label className="search-field">
-          <Search className="h-4 w-4 text-muted flex-shrink-0" aria-hidden="true" />
-          <input
-            type="search"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search transactions…"
-            aria-label="Search transactions"
-          />
-        </label>
+      <div className="rounded-xl border border-border bg-surface p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex h-9 min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-border bg-surface px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+            <Search className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search merchant, note or amount"
+              aria-label="Search expenses"
+              className="h-full w-full min-w-0 bg-transparent text-xs text-text outline-none placeholder:text-muted"
+            />
+            {searchInput ? (
+              <button
+                type="button"
+                onClick={() => setSearchInput('')}
+                aria-label="Clear search"
+                className="text-muted hover:text-text"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            ) : null}
+          </label>
 
-        <PeriodPicker
-          preset={period.preset}
-          range={period.range}
-          onPresetChange={period.setPreset}
-          onCustomChange={period.setCustomRange}
-        />
+          {!embedded ? (
+            <PeriodPicker
+              preset={period.preset}
+              range={period.range}
+              onPresetChange={period.setPreset}
+              onCustomChange={period.setCustomRange}
+            />
+          ) : null}
 
-        <select
-          value={typeId ? String(typeId) : ''}
-          onChange={(e) => updateParam('type', e.target.value || null)}
-          className="period-picker text-base sm:text-xs bg-surface cursor-pointer"
-          aria-label="Filter by expense type"
-        >
-          <option value="">All expense types</option>
-          {typesQuery.data?.items?.map((t) => (
-            <option key={t.id} value={String(t.id)}>
-              {t.name} {t.is_archived ? '(Archived)' : ''}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={payment}
-          onChange={(e) => updateParam('method', e.target.value || null)}
-          className="period-picker text-base sm:text-xs bg-surface cursor-pointer"
-          aria-label="Filter by payment method"
-        >
-          <option value="">All payment methods</option>
-          {PAYMENT_METHOD_OPTIONS.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={sort}
-          onChange={(e) => updateParam('sort', e.target.value)}
-          className="period-picker text-base sm:text-xs bg-surface cursor-pointer"
-          aria-label="Sort order"
-        >
-          {SORT_OPTIONS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-
-        {hasFilters && (
           <button
             type="button"
-            onClick={clearFilters}
-            className="button button-ghost button-sm text-muted hover:text-text flex items-center gap-1"
+            onClick={() => setShowFilters((open) => !open)}
+            className={cn(
+              'inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors',
+              showFilters || hasFilters
+                ? 'border-primary-border bg-primary-soft text-primary'
+                : 'border-border bg-surface text-muted hover:text-text',
+            )}
+            aria-expanded={showFilters}
           >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Reset filters</span>
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            Filters
+            {hasFilters ? (
+              <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+            ) : null}
           </button>
-        )}
+
+          {hasFilters ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-[11px] font-medium text-muted hover:text-text"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              Reset
+            </button>
+          ) : null}
+        </div>
+
+        {showFilters ? (
+          <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="space-y-1">
+              <span className="block text-[10px] font-medium text-muted">Expense type</span>
+              <select
+                value={typeId ? String(typeId) : ''}
+                onChange={(event) => updateParam('type', event.target.value || null)}
+                className={cn(selectClass(), 'w-full')}
+              >
+                <option value="">All types</option>
+                {typesQuery.data?.items?.map((type) => (
+                  <option key={type.id} value={String(type.id)}>
+                    {type.name}
+                    {type.is_archived ? ' (Archived)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="block text-[10px] font-medium text-muted">Payment method</span>
+              <select
+                value={payment}
+                onChange={(event) => updateParam('method', event.target.value || null)}
+                className={cn(selectClass(), 'w-full')}
+              >
+                <option value="">All methods</option>
+                {PAYMENT_METHOD_OPTIONS.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="block text-[10px] font-medium text-muted">Minimum ₹</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={minAmount}
+                onChange={(event) => setMinAmount(event.target.value)}
+                placeholder="0"
+                className={cn(selectClass(), 'w-full')}
+                aria-invalid={Boolean(amountError) || undefined}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="block text-[10px] font-medium text-muted">Maximum ₹</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={maxAmount}
+                onChange={(event) => setMaxAmount(event.target.value)}
+                placeholder="No limit"
+                className={cn(selectClass(), 'w-full')}
+                aria-invalid={Boolean(amountError) || undefined}
+              />
+            </label>
+
+            <label className="space-y-1 sm:col-span-2 lg:col-span-1">
+              <span className="block text-[10px] font-medium text-muted">Sort</span>
+              <select
+                value={sort}
+                onChange={(event) => updateParam('sort', event.target.value)}
+                className={cn(selectClass(), 'w-full')}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : null}
+
+        {amountError ? <p className="mt-2 text-[11px] font-medium text-danger">{amountError}</p> : null}
       </div>
 
-      <section className="card expense-table mt-4">
-        <div className="table-summary">
-          <span>
-            {expensesQuery.loading && !data ? (
-              'Loading transactions…'
-            ) : (
-              `${data?.total ?? 0} ${data?.total === 1 ? 'transaction' : 'transactions'}`
-            )}
+      <section className="mt-4 overflow-hidden rounded-xl border border-border bg-surface">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <span className="text-[11px] font-medium text-muted">
+            {expensesQuery.loading && !data
+              ? 'Loading transactions…'
+              : `${data?.total ?? 0} ${data?.total === 1 ? 'transaction' : 'transactions'}${
+                  hasFilters ? ' matching filters' : ''
+                }`}
           </span>
-          <strong>Total: {formatINR(summaryQuery.data?.total_paise ?? 0)}</strong>
+          {hasFilters ? (
+            <span className="text-[11px] text-muted">Filtered view</span>
+          ) : (
+            <strong className="font-mono text-[11px] font-semibold tabular-nums text-text">
+              Total {formatINR(summaryQuery.data?.total_paise ?? 0)}
+            </strong>
+          )}
         </div>
 
         {expensesQuery.loading && !data ? (
-          <div className="p-6 space-y-3">
+          <div className="space-y-3 p-5">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
         ) : expensesQuery.error ? (
-          <div className="p-6">
+          <div className="p-5">
             <ErrorState
               title="Could not load expenses"
-              description={typeof expensesQuery.error === 'string' ? expensesQuery.error : expensesQuery.error instanceof Error ? expensesQuery.error.message : 'Unknown error'}
+              description={expensesQuery.error.message}
               onRetry={() => expensesQuery.refetch()}
             />
           </div>
@@ -415,42 +459,36 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
           <div>
             {groupedExpenses.map((group) => (
               <div key={group.date} className="border-b border-border last:border-b-0">
-                <div className="bg-surface-muted/70 px-4 sm:px-5 py-2.5 flex items-center justify-between border-b border-border/60">
-                  <span className="flex items-center gap-2 text-xs font-semibold text-text">
-                    <Calendar className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-                    <span>{group.label}</span>
-                    <span className="text-[11px] font-normal text-muted">
-                      ({group.items.length} {group.items.length === 1 ? 'item' : 'items'})
-                    </span>
+                <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-raised px-4 py-2 sm:px-5">
+                  <span className="flex min-w-0 items-center gap-2 text-[11px] font-semibold text-text">
+                    <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+                    <span className="truncate">{group.label}</span>
+                    <span className="font-normal text-muted">{group.items.length}</span>
                   </span>
-                  <span className="text-xs font-bold text-text font-mono">
+                  <span className="shrink-0 font-mono text-[11px] font-semibold tabular-nums text-text">
                     {formatINR(group.subtotalPaise)}
                   </span>
                 </div>
-
-                <div>
-                  {group.items.map((expense) => (
-                    <TransactionRow
-                      key={expense.id}
-                      expense={expense}
-                      onEdit={openEdit}
-                      onDelete={(item) => setDeleteTarget(item)}
-                      hideDate={false}
-                    />
-                  ))}
-                </div>
+                {group.items.map((expense) => (
+                  <TransactionRow
+                    key={expense.id}
+                    expense={expense}
+                    onEdit={openEdit}
+                    onDelete={(item) => setDeleteTarget(item)}
+                  />
+                ))}
               </div>
             ))}
           </div>
         ) : (
-          <div className="p-8 text-center">
+          <div className="p-5">
             <EmptyState
               icon={Receipt}
               title={hasFilters ? 'No matching expenses' : 'No expenses recorded'}
               description={
                 hasFilters
-                  ? 'No transactions matched your search or filters. Try adjusting your query or date range.'
-                  : "You don't have any expenses recorded for this period."
+                  ? 'No transactions matched this search and date range. Clear the filters to see everything.'
+                  : 'Nothing has been recorded for this period. Add an expense or change the date range.'
               }
               action={
                 hasFilters ? (
@@ -460,7 +498,7 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
                 ) : (
                   <Button variant="primary" onClick={() => openCreate()}>
                     <Plus className="h-4 w-4" aria-hidden="true" />
-                    <span>Add expense</span>
+                    Add expense
                   </Button>
                 )
               }
@@ -468,39 +506,29 @@ export function ExpensesPage({ embedded = false }: { embedded?: boolean } = {}) 
           </div>
         )}
 
-        {data && data.pages > 1 && (
-          <div className="pagination">
+        {data && data.pages > 1 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 text-[11px] text-muted">
             <span>
               Page {data.page} of {data.pages}
             </span>
-            <div>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={data.page <= 1}
-                onClick={() => goToPage(data.page - 1)}
-              >
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" disabled={data.page <= 1} onClick={() => goToPage(data.page - 1)}>
                 <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Previous</span>
+                Previous
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={data.page >= data.pages}
-                onClick={() => goToPage(data.page + 1)}
-              >
-                <span>Next</span>
+              <Button variant="secondary" size="sm" disabled={data.page >= data.pages} onClick={() => goToPage(data.page + 1)}>
+                Next
                 <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
             </div>
           </div>
-        )}
+        ) : null}
       </section>
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="Delete expense"
-        description={`Are you sure you want to delete ${deleteTarget ? formatINR(deleteTarget.amount_paise) : 'this expense'}? This action cannot be undone.`}
+        description={`Delete ${deleteTarget ? formatINR(deleteTarget.amount_paise) : 'this expense'}? The ledger balance will be recalculated. This cannot be undone.`}
         confirmLabel="Delete"
         tone="danger"
         loading={deleting}

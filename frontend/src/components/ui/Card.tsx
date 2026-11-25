@@ -24,3 +24,16 @@ export function CardHeader({ title, description, action, className }: CardHeader
     </div>
   )
 }
+
+export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn('p-5 sm:p-6', className)} {...props} />
+}
+
+export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn('border-t border-line bg-surface-raised/40 px-5 py-3 sm:px-6', className)}
+      {...props}
+    />
+  )
+}

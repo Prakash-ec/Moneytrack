@@ -1,43 +1,43 @@
-import {
-  ArrowLeftRight,
-  ArrowRight,
-  Info,
-  Plus,
-} from 'lucide-react'
+import { ArrowLeftRight, ArrowRight, Info, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
+import { AppPage } from '@/components/AppPage'
 import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
 import { Button } from '@/components/ui/Button'
+import { Field, Input, Select, Textarea } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
+import { Panel, PanelHeader } from '@/components/ui/Panel'
 import { EmptyState, ErrorState, PageSkeleton } from '@/components/ui/States'
 import { useApiQuery } from '@/hooks/useApiQuery'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { usePeriod } from '@/hooks/usePeriod'
+import { useDataRefresh } from '@/providers/RefreshProvider'
 import { useToast } from '@/providers/ToastProvider'
 import { api } from '@/services/api'
 import type { BankAccount, TransferCreateInput } from '@/types/api'
 import { formatINR, parseRupeesToPaise } from '@/utils/currency'
-import { formatDate } from '@/utils/dates'
+import { formatDate, todayIST } from '@/utils/dates'
 import { formatRangeLabel } from '@/utils/periods'
 
 export function TransfersPage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Account Transfers')
   const period = usePeriod()
+  const navigate = useNavigate()
+  const { invalidate } = useDataRefresh()
   const { showToast } = useToast()
   const { start, end } = period.range
 
-  // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [fromAccountId, setFromAccountId] = useState<number | ''>('')
   const [toAccountId, setToAccountId] = useState<number | ''>('')
   const [formAmount, setFormAmount] = useState('')
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [formDate, setFormDate] = useState(() => todayIST())
   const [formReference, setFormReference] = useState('')
   const [formNote, setFormNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  // Queries
   const bankAccountsQuery = useApiQuery(['bank-accounts'], () => api.listBankAccounts())
   const transfersQuery = useApiQuery(['transfers', start, end], () =>
     api.listTransfers({ start_date: start, end_date: end }),
@@ -45,13 +45,13 @@ export function TransfersPage({ embedded = false }: { embedded?: boolean } = {})
 
   const bankAccounts: BankAccount[] = bankAccountsQuery.data?.items ?? []
   const transfers = transfersQuery.data?.items ?? []
-  const totalTransferPaise = transfers.reduce((sum, t) => sum + t.amount_paise, 0)
+  const totalTransferPaise = transfers.reduce((sum, transfer) => sum + transfer.amount_paise, 0)
 
   const openCreateDialog = () => {
     setFromAccountId(bankAccounts[0]?.id ?? '')
     setToAccountId(bankAccounts[1]?.id ?? '')
     setFormAmount('')
-    setFormDate(new Date().toISOString().slice(0, 10))
+    setFormDate(todayIST())
     setFormReference('')
     setFormNote('')
     setIsDialogOpen(true)
@@ -60,16 +60,28 @@ export function TransfersPage({ embedded = false }: { embedded?: boolean } = {})
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!fromAccountId || !toAccountId) {
-      showToast({ title: 'Select Accounts', description: 'Please select both source and destination accounts.', variant: 'error' })
+      showToast({
+        title: 'Select both accounts',
+        description: 'A transfer needs a source and a destination.',
+        variant: 'error',
+      })
       return
     }
     if (fromAccountId === toAccountId) {
-      showToast({ title: 'Invalid Transfer', description: 'Source and destination accounts must be different.', variant: 'error' })
+      showToast({
+        title: 'Invalid transfer',
+        description: 'Source and destination must be different accounts.',
+        variant: 'error',
+      })
       return
     }
     const amountPaise = parseRupeesToPaise(formAmount)
     if (!amountPaise || amountPaise <= 0) {
-      showToast({ title: 'Invalid Amount', description: 'Please enter a valid transfer amount greater than zero.', variant: 'error' })
+      showToast({
+        title: 'Invalid amount',
+        description: 'Enter a transfer amount greater than zero.',
+        variant: 'error',
+      })
       return
     }
 
@@ -85,14 +97,18 @@ export function TransfersPage({ embedded = false }: { embedded?: boolean } = {})
       }
 
       await api.createTransfer(payload)
-      showToast({ title: 'Transfer Completed', description: 'Balances adjusted between accounts.' })
+      showToast({
+        title: 'Transfer recorded',
+        description: 'Both account balances were adjusted in one transaction.',
+      })
       setIsDialogOpen(false)
+      invalidate()
       transfersQuery.refetch()
       bankAccountsQuery.refetch()
     } catch (err) {
       showToast({
-        title: 'Transfer Failed',
-        description: err instanceof Error ? err.message : 'Could not execute account transfer.',
+        title: 'Could not record transfer',
+        description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
@@ -100,269 +116,283 @@ export function TransfersPage({ embedded = false }: { embedded?: boolean } = {})
     }
   }
 
-  if (transfersQuery.loading && !transfersQuery.data) {
-    return <PageSkeleton />
-  }
+  const content = (() => {
+    if (transfersQuery.loading && !transfersQuery.data) {
+      return <PageSkeleton />
+    }
 
-  if (transfersQuery.error) {
-    return (
-      <div className="page">
+    if (transfersQuery.error) {
+      return (
         <ErrorState
           title="Could not load transfers"
-          description={transfersQuery.error instanceof Error ? transfersQuery.error.message : 'An error occurred'}
+          description={
+            transfersQuery.error instanceof Error
+              ? transfersQuery.error.message
+              : 'The transfer request failed.'
+          }
           onRetry={() => transfersQuery.refetch()}
         />
-      </div>
-    )
-  }
+      )
+    }
 
-  return (
-    <div className={embedded ? '' : 'page'}>
-      {!embedded && (
-        <PageHeader
-          eyebrow="Internal ledger"
-          title="Account transfers"
-          description={`${formatRangeLabel(period.range)} · Inter-account liquidity`}
-          actions={
-            <div className="flex items-center gap-2">
-              <PeriodPicker
-                preset={period.preset}
-                range={period.range}
-                onPresetChange={period.setPreset}
-                onCustomChange={period.setCustomRange}
-              />
-              <Button
-                variant="primary"
-                disabled={bankAccounts.length < 2}
-                onClick={openCreateDialog}
-                title={bankAccounts.length < 2 ? 'You need at least 2 bank accounts to transfer' : undefined}
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                <span>New transfer</span>
+    return (
+      <>
+        {!embedded ? (
+          <PageHeader
+            eyebrow="Internal ledger"
+            title="Account transfers"
+            description={`${formatRangeLabel(period.range)} · Asia/Kolkata`}
+            actions={
+              <>
+                <PeriodPicker
+                  preset={period.preset}
+                  range={period.range}
+                  onPresetChange={period.setPreset}
+                  onCustomChange={period.setCustomRange}
+                />
+                <Button
+                  variant="primary"
+                  disabled={bankAccounts.length < 2}
+                  onClick={openCreateDialog}
+                  title={
+                    bankAccounts.length < 2
+                      ? 'Add at least two bank accounts to transfer between them'
+                      : undefined
+                  }
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  New transfer
+                </Button>
+              </>
+            }
+          />
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Panel className="p-4">
+            <p className="text-[11px] font-medium text-muted">Moved in period</p>
+            <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+              {formatINR(totalTransferPaise)}
+            </p>
+            <p className="mt-1 text-[11px] text-muted">
+              {transfers.length} movement{transfers.length === 1 ? '' : 's'} shown
+            </p>
+          </Panel>
+
+          <Panel className="p-4">
+            <p className="text-[11px] font-medium text-muted">Accounts available</p>
+            <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+              {bankAccounts.length}
+            </p>
+            <p className="mt-1 text-[11px] text-muted">
+              {bankAccounts.length < 2
+                ? 'Two accounts are required'
+                : 'Eligible as source or destination'}
+            </p>
+          </Panel>
+
+          <Panel className="p-4">
+            <p className="text-[11px] font-medium text-muted">Net worth impact</p>
+            <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+              ₹0.00
+            </p>
+            <p className="mt-1 text-[11px] text-muted">
+              Internal movement never changes consolidated balance
+            </p>
+          </Panel>
+        </div>
+
+        <div className="mt-4 flex items-start gap-2.5 rounded-[var(--radius-card)] border border-border bg-surface px-4 py-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+          <p className="text-[12px] leading-5 text-muted">
+            A transfer debits one account and credits another in the same database transaction.
+            It does not appear as income or expense.
+          </p>
+        </div>
+
+        <Panel className="mt-4 overflow-hidden">
+          <PanelHeader
+            title="Transfer history"
+            description={formatRangeLabel(period.range)}
+            action={
+              bankAccounts.length >= 2 && embedded ? (
+                <Button variant="primary" size="sm" onClick={openCreateDialog}>
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  Transfer
+                </Button>
+              ) : null
+            }
+          />
+
+          {transfers.length > 0 ? (
+            <ul className="divide-y divide-border">
+              {transfers.map((transfer) => {
+                const from = transfer.from_account
+                const to = transfer.to_account
+                return (
+                  <li
+                    key={transfer.id}
+                    className="flex flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-raised text-muted">
+                      <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-text">
+                        <span className="truncate">{from?.name ?? 'Source account'}</span>
+                        <ArrowRight className="h-3 w-3 shrink-0 text-muted" aria-hidden="true" />
+                        <span className="truncate">{to?.name ?? 'Destination account'}</span>
+                      </p>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
+                        <span>{formatDate(transfer.transfer_date)}</span>
+                        {from ? (
+                          <span className="truncate">
+                            {from.bank_name}
+                            {from.account_number_mask ? ` ••${from.account_number_mask}` : ''}
+                          </span>
+                        ) : null}
+                        {transfer.reference ? (
+                          <span className="truncate font-mono text-[10px] text-subtle">
+                            Ref {transfer.reference}
+                          </span>
+                        ) : null}
+                      </p>
+                      {transfer.note ? (
+                        <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-muted">
+                          {transfer.note}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <p className="shrink-0 font-mono text-[13px] font-medium tabular-nums text-text sm:text-right">
+                      {formatINR(transfer.amount_paise)}
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <EmptyState
+              icon={ArrowLeftRight}
+              title="No transfers in this period"
+              description={
+                bankAccounts.length >= 2
+                  ? 'Move money between your own accounts without changing income or expenses.'
+                  : 'Add at least two bank accounts before recording an internal transfer.'
+              }
+              action={
+                bankAccounts.length >= 2 ? (
+                  <Button variant="primary" onClick={openCreateDialog}>
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    Record a transfer
+                  </Button>
+                ) : (
+                  <Button variant="secondary" onClick={() => navigate('/bank-accounts')}>
+                    Add bank accounts
+                  </Button>
+                )
+              }
+            />
+          )}
+        </Panel>
+
+        <Modal
+          open={isDialogOpen}
+          onClose={() => setIsDialogOpen(false)}
+          title="Record account transfer"
+          description="Both sides post together. The consolidated balance stays unchanged."
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="secondary" type="button" onClick={() => setIsDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" form="transfer-form" loading={submitting}>
+                Complete transfer
               </Button>
             </div>
           }
-        />
-      )}
+        >
+          <form id="transfer-form" onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="From account" required>
+                <Select
+                  required
+                  value={fromAccountId}
+                  onChange={(event) => setFromAccountId(Number(event.target.value))}
+                >
+                  {bankAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id} disabled={acc.id === toAccountId}>
+                      {acc.name} · {formatINR(acc.current_balance_paise)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-      {/* Information Banner */}
-      <div className="card p-3.5 sm:p-4 mb-5 flex items-start gap-3 bg-surface-raised border border-border">
-        <div className="p-1 rounded-md bg-surface text-muted shrink-0 mt-0.5 border border-border">
-          <Info className="h-4 w-4" aria-hidden="true" />
-        </div>
-        <div className="text-xs text-muted leading-relaxed">
-          <strong className="text-text font-medium">Non-taxable inter-account movement:</strong> Transfers between your own accounts adjust source and destination balances in the ledger without affecting income, expense, or consolidated balance totals.
-        </div>
-      </div>
-
-      {/* Transfer Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-        <div className="card p-4 sm:p-5">
-          <div className="text-xs font-medium text-muted mb-1">
-            Total transferred
-          </div>
-          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
-            {formatINR(totalTransferPaise)}
-          </div>
-          <div className="text-[11px] text-muted mt-1">
-            {transfers.length} inter-account movement{transfers.length === 1 ? '' : 's'}
-          </div>
-        </div>
-
-        <div className="card p-4 sm:p-5">
-          <div className="text-xs font-medium text-muted mb-1">
-            Active accounts
-          </div>
-          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
-            {bankAccounts.length}
-          </div>
-          <div className="text-[11px] text-muted mt-1">Available for internal routing</div>
-        </div>
-
-        <div className="card p-4 sm:p-5">
-          <div className="text-xs font-medium text-muted mb-1">
-            Net worth impact
-          </div>
-          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
-            ₹0.00
-          </div>
-          <div className="text-[11px] text-muted mt-1">Zero impact on consolidated worth</div>
-        </div>
-      </div>
-
-      {/* Transfers List */}
-      {transfers.length > 0 ? (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-surface-raised border-b border-border text-muted font-medium text-xs">
-                <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">From account</th>
-                  <th className="py-3 px-4 text-center">Direction</th>
-                  <th className="py-3 px-4">To account</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
-                  <th className="py-3 px-4">Reference / note</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {transfers.map((transfer) => (
-                  <tr key={transfer.id} className="hover:bg-surface-raised/50 transition-colors">
-                    <td className="py-3.5 px-4 font-mono tabular-nums text-muted whitespace-nowrap">
-                      {formatDate(transfer.transfer_date)}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-medium text-text">{transfer.from_account?.name}</div>
-                      <div className="text-[10px] text-muted font-mono tabular-nums">
-                        {transfer.from_account?.bank_name} {transfer.from_account?.account_number_mask && `••${transfer.from_account.account_number_mask}`}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="inline-flex items-center justify-center p-1 rounded-md bg-surface-raised text-muted border border-border">
-                        <ArrowRight className="h-3 w-3" aria-hidden="true" />
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-medium text-text">{transfer.to_account?.name}</div>
-                      <div className="text-[10px] text-muted font-mono tabular-nums">
-                        {transfer.to_account?.bank_name} {transfer.to_account?.account_number_mask && `••${transfer.to_account.account_number_mask}`}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-text text-sm whitespace-nowrap">
-                      {formatINR(transfer.amount_paise)}
-                    </td>
-                    <td className="py-3.5 px-4 text-muted">
-                      {transfer.reference && <div className="font-mono tabular-nums text-[10px]">Ref: {transfer.reference}</div>}
-                      {transfer.note && <div className="text-[11px] truncate max-w-xs">{transfer.note}</div>}
-                      {!transfer.reference && !transfer.note && <span className="text-[11px]">—</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        <div className="card p-8 text-center">
-          <EmptyState
-            icon={ArrowLeftRight}
-            title="No transfers in this period"
-            description="Move funds between your savings accounts, cards, or physical cash wallets."
-            action={
-              bankAccounts.length >= 2 ? (
-                <Button variant="primary" onClick={openCreateDialog}>
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  <span>Record first transfer</span>
-                </Button>
-              ) : (
-                <span className="text-xs text-muted">
-                  Add at least 2 bank accounts in the Bank Accounts section to enable transfers.
-                </span>
-              )
-            }
-          />
-        </div>
-      )}
-
-      {/* New Transfer Modal */}
-      <Modal
-        open={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        title="Record Account Transfer"
-        footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="secondary" type="button" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="button" disabled={submitting} onClick={handleSubmit}>
-              {submitting ? 'Executing Transfer...' : 'Complete Transfer'}
-            </Button>
-          </div>
-        }
-      >
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">From Account (Source) *</label>
-              <select
-                required
-                value={fromAccountId}
-                onChange={(e) => setFromAccountId(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
-              >
-                {bankAccounts.map((acc) => (
-                  <option key={acc.id} value={acc.id} disabled={acc.id === toAccountId}>
-                    {acc.name} ({formatINR(acc.current_balance_paise)})
-                  </option>
-                ))}
-              </select>
+              <Field label="To account" required>
+                <Select
+                  required
+                  value={toAccountId}
+                  onChange={(event) => setToAccountId(Number(event.target.value))}
+                >
+                  {bankAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id} disabled={acc.id === fromAccountId}>
+                      {acc.name} · {formatINR(acc.current_balance_paise)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">To Account (Destination) *</label>
-              <select
-                required
-                value={toAccountId}
-                onChange={(e) => setToAccountId(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
-              >
-                {bankAccounts.map((acc) => (
-                  <option key={acc.id} value={acc.id} disabled={acc.id === fromAccountId}>
-                    {acc.name} ({formatINR(acc.current_balance_paise)})
-                  </option>
-                ))}
-              </select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Amount (₹)" required>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={formAmount}
+                  onChange={(event) => setFormAmount(event.target.value)}
+                  placeholder="0.00"
+                  inputMode="decimal"
+                  className="font-mono text-[15px] tabular-nums"
+                />
+              </Field>
+
+              <Field label="Date" required>
+                <Input
+                  type="date"
+                  required
+                  value={formDate}
+                  onChange={(event) => setFormDate(event.target.value)}
+                />
+              </Field>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Transfer Amount (₹) *</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              required
-              value={formAmount}
-              onChange={(e) => setFormAmount(e.target.value)}
-              placeholder="e.g. 10000"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-sm font-bold text-text focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
+            <Field label="Reference or UTR" optional hint="Useful when reconciling against a bank statement.">
+              <Input
+                type="text"
+                value={formReference}
+                onChange={(event) => setFormReference(event.target.value)}
+                placeholder="IMPS, NEFT or UPI reference"
+                className="font-mono text-[12px]"
+              />
+            </Field>
 
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Date *</label>
-            <input
-              type="date"
-              required
-              value={formDate}
-              onChange={(e) => setFormDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
-            />
-          </div>
+            <Field label="Note" optional>
+              <Textarea
+                rows={2}
+                value={formNote}
+                onChange={(event) => setFormNote(event.target.value)}
+                placeholder="Why the money moved"
+              />
+            </Field>
+          </form>
+        </Modal>
+      </>
+    )
+  })()
 
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Reference / UTR / Txn ID</label>
-            <input
-              type="text"
-              value={formReference}
-              onChange={(e) => setFormReference(e.target.value)}
-              placeholder="e.g. IMPS/429104829104"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Note</label>
-            <textarea
-              rows={2}
-              value={formNote}
-              onChange={(e) => setFormNote(e.target.value)}
-              placeholder="Optional purpose (e.g. Credit card payment, CC bill, wallet top-up)"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none resize-none"
-            />
-          </div>
-        </form>
-      </Modal>
-    </div>
-  )
+  if (embedded) return <div>{content}</div>
+  return <AppPage>{content}</AppPage>
 }

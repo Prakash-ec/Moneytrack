@@ -22,13 +22,26 @@ export function PageHeader({
   const effectiveAction = actions ?? action
 
   return (
-    <header className={cn('page-header', className)}>
-      <div>
-        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-        <h1>{title}</h1>
-        {description ? <p className="page-description">{description}</p> : null}
+    <header
+      className={cn(
+        'mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-end sm:justify-between',
+        className,
+      )}
+    >
+      <div className="min-w-0">
+        {eyebrow ? (
+          <p className="text-[11px] font-medium leading-none text-muted">{eyebrow}</p>
+        ) : null}
+        <h1 className="mt-1 font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] text-text sm:text-[26px]">
+          {title}
+        </h1>
+        {description ? (
+          <div className="mt-1 text-[13px] leading-5 text-muted">{description}</div>
+        ) : null}
       </div>
-      {effectiveAction ? <div className="page-actions">{effectiveAction}</div> : null}
+      {effectiveAction ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">{effectiveAction}</div>
+      ) : null}
     </header>
   )
 }

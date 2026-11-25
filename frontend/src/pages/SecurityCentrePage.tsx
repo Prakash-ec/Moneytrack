@@ -1,32 +1,53 @@
+import { AlertTriangle, CheckCircle2, Phone, RefreshCw, ShieldCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import {
-  AlertTriangle,
-  CheckCircle,
-  Phone,
-  RefreshCw,
-  ShieldCheck,
-} from 'lucide-react'
+
+import { AppPage } from '@/components/AppPage'
 import { PageHeader } from '@/components/PageHeader'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Field, Textarea } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
+import { Panel, PanelHeader } from '@/components/ui/Panel'
 import { CardSkeleton, EmptyState, ErrorState } from '@/components/ui/States'
+import { useToast } from '@/providers/ToastProvider'
 import { api, ApiError } from '@/services/api'
-import type {
-  SecurityAlert,
-  SecuritySummary,
-  SecurityActionResponse,
-} from '@/types/api'
+import type { SecurityActionResponse, SecurityAlert, SecuritySummary } from '@/types/api'
 import { cn } from '@/utils/cn'
+import { formatINR } from '@/utils/currency'
+
+type SecurityFilter = 'NEEDS_REVIEW' | 'ALL' | 'DISPUTED' | 'RECOGNISED'
+
+const FILTERS: Array<{ id: SecurityFilter; label: string }> = [
+  { id: 'NEEDS_REVIEW', label: 'Needs review' },
+  { id: 'ALL', label: 'All alerts' },
+  { id: 'DISPUTED', label: 'Disputed' },
+  { id: 'RECOGNISED', label: 'Recognised' },
+]
+
+const HELPLINES = [
+  { bank: 'State Bank of India (SBI)', phone: '1800 11 1109 / 1800 425 3800' },
+  { bank: 'HDFC Bank', phone: '1800 1600 / 1800 266 4060' },
+  { bank: 'ICICI Bank', phone: '1800 1080' },
+  { bank: 'Axis Bank', phone: '1860 419 5555' },
+  { bank: 'Kotak Mahindra Bank', phone: '1860 266 2666' },
+  { bank: 'Punjab National Bank (PNB)', phone: '1800 1800 / 1800 2021' },
+]
+
+function severityTone(severity: SecurityAlert['severity']) {
+  if (severity === 'CRITICAL') return 'text-danger'
+  if (severity === 'WARNING') return 'text-warning'
+  return 'text-primary'
+}
 
 export default function SecurityCentrePage() {
+  const { showToast } = useToast()
   const [summary, setSummary] = useState<SecuritySummary | null>(null)
   const [alerts, setAlerts] = useState<SecurityAlert[]>([])
-  const [filter, setFilter] = useState<'ALL' | 'NEEDS_REVIEW' | 'DISPUTED' | 'RECOGNISED'>('NEEDS_REVIEW')
+  const [filter, setFilter] = useState<SecurityFilter>('NEEDS_REVIEW')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null)
 
-  // Dispute modal state
   const [disputeModalOpen, setDisputeModalOpen] = useState(false)
   const [selectedAlert, setSelectedAlert] = useState<SecurityAlert | null>(null)
   const [disputeReason, setDisputeReason] = useState('')
@@ -44,7 +65,7 @@ export default function SecurityCentrePage() {
       setAlerts(alertData)
     } catch (err) {
       if (err instanceof ApiError) setError(err.message)
-      else setError('Failed to load security centre. Check your backend server.')
+      else setError('Failed to load the security centre. Check the backend connection.')
     } finally {
       setLoading(false)
     }
@@ -60,7 +81,11 @@ export default function SecurityCentrePage() {
       await api.actionSecurityAlert(alertId, 'recognise')
       await loadData()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update alert')
+      showToast({
+        title: 'Could not update alert',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'error',
+      })
     } finally {
       setActionLoadingId(null)
     }
@@ -81,276 +106,262 @@ export default function SecurityCentrePage() {
       setDisputeResult(result)
       await loadData()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to register dispute')
+      showToast({
+        title: 'Could not register dispute',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'error',
+      })
     } finally {
       setActionLoadingId(null)
     }
   }
 
-  const formatInr = (paise: number) => {
-    const rupees = Math.abs(paise) / 100
-    return `₹${rupees.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  }
-
   return (
-    <div className="space-y-6 pb-20">
+    <AppPage>
       <PageHeader
-        title="Payment Security Centre"
-        description="Monitor potentially unusual charges, unfamiliar merchants, and rapid transactions."
+        eyebrow="Protection"
+        title="Payment security"
+        description="Unusual amounts, unfamiliar merchants and rapid debits, surfaced for review."
+        actions={
+          <Button variant="secondary" onClick={loadData} loading={loading}>
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            Refresh
+          </Button>
+        }
       />
 
-      {/* Security Shield Overview Banner */}
-      <div className="relative overflow-hidden rounded-[1.5rem] border border-line/60 bg-gradient-to-br from-surface-card via-surface to-background p-6 shadow-soft backdrop-blur-xl">
-        <div className="absolute right-4 -top-8 -mr-6 h-40 w-40 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary border border-primary/25 shadow-inner">
-              <ShieldCheck className="h-7 w-7" />
-            </div>
-            <div>
-              <h2 className="font-display text-lg font-bold text-ink">Account Protection Active</h2>
-              <p className="text-xs text-muted max-w-md">
-                Heuristic security actively inspects new debits for unusual amounts (&gt;3x average), new merchants, and rapid consecutive debits.
+      <Panel className="p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3.5">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-primary-border bg-primary-soft text-primary">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[14px] font-semibold text-text">Protection is active</p>
+              <p className="mt-1 max-w-lg text-[12px] leading-5 text-muted">
+                New debits are inspected for amounts well above your average, unfamiliar
+                merchants, and rapid consecutive charges. Nothing is blocked automatically.
               </p>
             </div>
           </div>
-
-          <div className="flex w-full sm:w-auto items-center gap-3">
-            <Button variant="secondary" size="sm" onClick={loadData} disabled={loading}>
-              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-              Refresh
-            </Button>
-          </div>
         </div>
 
-        {/* Counter Pills */}
-        <div className="mt-6 grid grid-cols-3 gap-3 border-t border-line/40 pt-4">
-          <div className="rounded-xl bg-surface/50 p-3 text-center border border-line/40">
-            <div className="text-xs text-muted">Needs Review</div>
-            <div className="mt-1 font-display text-xl font-bold text-amber-400">
-              {summary ? summary.needs_review_count : '–'}
-            </div>
+        <div className="mt-5 grid grid-cols-3 gap-2.5 border-t border-border pt-4">
+          <div className="rounded-lg border border-border bg-surface-raised px-3 py-2.5">
+            <p className="text-[10px] font-medium text-muted">Needs review</p>
+            <p className="mt-1 font-mono text-[20px] font-medium tabular-nums text-warning">
+              {summary ? summary.needs_review_count : '—'}
+            </p>
           </div>
-          <div className="rounded-xl bg-surface/50 p-3 text-center border border-line/40">
-            <div className="text-xs text-muted">Disputed</div>
-            <div className="mt-1 font-display text-xl font-bold text-danger">
-              {summary ? summary.disputed_count : '–'}
-            </div>
+          <div className="rounded-lg border border-border bg-surface-raised px-3 py-2.5">
+            <p className="text-[10px] font-medium text-muted">Disputed</p>
+            <p className="mt-1 font-mono text-[20px] font-medium tabular-nums text-danger">
+              {summary ? summary.disputed_count : '—'}
+            </p>
           </div>
-          <div className="rounded-xl bg-surface/50 p-3 text-center border border-line/40">
-            <div className="text-xs text-muted">Total Monitored</div>
-            <div className="mt-1 font-display text-xl font-bold text-ink">
-              {summary ? summary.total_alerts : '–'}
-            </div>
+          <div className="rounded-lg border border-border bg-surface-raised px-3 py-2.5">
+            <p className="text-[10px] font-medium text-muted">Total monitored</p>
+            <p className="mt-1 font-mono text-[20px] font-medium tabular-nums text-text">
+              {summary ? summary.total_alerts : '—'}
+            </p>
           </div>
         </div>
+      </Panel>
+
+      <div
+        className="mt-4 flex items-center gap-1 overflow-x-auto rounded-lg border border-border bg-surface p-1 no-scrollbar"
+        role="tablist"
+        aria-label="Security alert filter"
+      >
+        {FILTERS.map((item) => {
+          const selected = filter === item.id
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setFilter(item.id)}
+              className={cn(
+                'inline-flex h-9 shrink-0 items-center rounded-md px-3 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+                selected ? 'bg-surface-raised text-text shadow-sm' : 'text-muted hover:text-text',
+              )}
+            >
+              {item.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-medium no-scrollbar">
-        {(['NEEDS_REVIEW', 'ALL', 'DISPUTED', 'RECOGNISED'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setFilter(tab)}
-            className={cn(
-              'rounded-xl px-4 py-2 min-h-[44px] transition-all font-semibold shrink-0',
-              filter === tab
-                ? 'bg-primary text-white shadow-md'
-                : 'bg-surface border border-line text-muted hover:text-ink hover:bg-surface-hover'
-            )}
-          >
-            {tab === 'NEEDS_REVIEW' && '⚠️ Needs Review'}
-            {tab === 'ALL' && 'All Alerts'}
-            {tab === 'DISPUTED' && 'Disputed'}
-            {tab === 'RECOGNISED' && 'Recognised'}
-          </button>
-        ))}
-      </div>
-
-      {/* Alerts Feed */}
       {loading ? (
-        <div className="space-y-4">
+        <div className="mt-4 space-y-3">
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
         </div>
       ) : error ? (
-        <ErrorState description={error} onRetry={loadData} />
+        <div className="mt-4">
+          <ErrorState description={error} onRetry={loadData} />
+        </div>
       ) : alerts.length === 0 ? (
-        <EmptyState
-          icon={ShieldCheck}
-          title={filter === 'NEEDS_REVIEW' ? 'All Clear! No alerts need review.' : 'No security alerts found.'}
-          description="MoneyTrack will notify you if any transaction triggers suspicious amount, unfamiliar merchant, or rapid debit heuristics."
-        />
+        <Panel className="mt-4">
+          <EmptyState
+            icon={ShieldCheck}
+            title={filter === 'NEEDS_REVIEW' ? 'Nothing needs review' : 'No alerts in this view'}
+            description="MoneyTrack will surface an alert here when a transaction triggers the unusual-amount, unfamiliar-merchant or rapid-debit checks."
+          />
+        </Panel>
       ) : (
-        <div className="space-y-4">
+        <div className="mt-4 space-y-3">
           {alerts.map((alert) => {
             const isDisputed = alert.status === 'DISPUTED'
             const isRecognised = alert.status === 'RECOGNISED'
 
             return (
-              <div
+              <Panel
                 key={alert.id}
                 className={cn(
-                  'rounded-2xl border p-5 transition-all shadow-sm',
-                  isDisputed
-                    ? 'border-danger/30 bg-danger/5'
-                    : isRecognised
-                    ? 'border-line/40 bg-surface/40'
-                    : 'border-amber-500/30 bg-surface-card'
+                  'p-4 sm:p-5',
+                  isDisputed && 'border-danger-border',
+                  !isDisputed && !isRecognised && 'border-warning-border',
                 )}
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <div
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
                       className={cn(
-                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold text-xs',
-                        alert.severity === 'CRITICAL'
-                          ? 'bg-danger/20 text-danger border border-danger/30'
-                          : alert.severity === 'WARNING'
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-raised',
+                        severityTone(alert.severity),
                       )}
                     >
-                      {alert.severity === 'CRITICAL' ? '!' : '⚠️'}
-                    </div>
+                      <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                    </span>
 
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-display font-bold text-ink">
-                          {alert.merchant || 'Unfamiliar Recipient'}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-[13px] font-medium text-text">
+                          {alert.merchant || 'Unfamiliar recipient'}
                         </span>
-                        <span
-                          className={cn(
-                            'rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase',
-                            alert.status === 'NEEDS_REVIEW' && 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
-                            alert.status === 'DISPUTED' && 'bg-danger/15 text-danger border border-danger/30',
-                            alert.status === 'RECOGNISED' && 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                          )}
+                        <Badge
+                          tone={
+                            isDisputed ? 'danger' : isRecognised ? 'positive' : 'warning'
+                          }
                         >
-                          {alert.status.replace('_', ' ')}
-                        </span>
-                        {alert.account_suffix && (
-                          <span className="text-[10px] text-muted">A/c ending {alert.account_suffix}</span>
-                        )}
+                          {alert.status.replace('_', ' ').toLowerCase()}
+                        </Badge>
+                        {alert.account_suffix ? (
+                          <span className="font-mono text-[10px] text-subtle">
+                            A/c ••{alert.account_suffix}
+                          </span>
+                        ) : null}
                       </div>
-                      <p className="text-xs text-muted leading-relaxed">{alert.reason}</p>
+                      <p className="mt-1 text-[12px] leading-5 text-muted">{alert.reason}</p>
                     </div>
                   </div>
 
-                  <div className="text-right sm:self-center">
-                    <div className="font-display text-lg font-bold text-ink">
-                      {formatInr(alert.amount_paise)}
-                    </div>
-                    <div className="text-[11px] text-muted">
+                  <div className="shrink-0 sm:text-right">
+                    <p className="font-mono text-[15px] font-medium tabular-nums text-text">
+                      {formatINR(alert.amount_paise)}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10px] tabular-nums text-subtle">
                       {new Date(alert.created_at).toLocaleDateString('en-IN', {
                         day: 'numeric',
                         month: 'short',
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
-                    </div>
+                    </p>
                   </div>
                 </div>
 
-                {/* Dispute details if available */}
-                {isDisputed && alert.dispute_reason && (
-                  <div className="mt-3 rounded-xl border border-danger/25 bg-danger/10 p-3 text-xs text-danger-soft">
-                    <span className="font-semibold text-danger">Reported Dispute: </span>
+                {isDisputed && alert.dispute_reason ? (
+                  <div className="mt-3 rounded-lg border border-danger-border bg-danger-soft px-3 py-2 text-[11px] leading-5 text-text">
+                    <span className="font-medium text-danger">Reported dispute: </span>
                     {alert.dispute_reason}
                   </div>
-                )}
+                ) : null}
 
-                {/* Action Controls */}
-                {alert.status === 'NEEDS_REVIEW' && (
-                  <div className="mt-4 flex flex-wrap items-center gap-2.5 pt-3 border-t border-line/40">
+                {alert.status === 'NEEDS_REVIEW' ? (
+                  <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-border pt-3.5">
                     <Button
                       variant="primary"
                       size="sm"
-                      className="min-h-[44px]"
                       onClick={() => handleRecognise(alert.id)}
                       disabled={actionLoadingId === alert.id}
                     >
-                      <CheckCircle className="h-4 w-4 text-emerald-400" />
-                      I Recognise This
+                      <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      I recognise this
                     </Button>
-
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="min-h-[44px] border-danger/30 text-danger hover:bg-danger/10"
+                      className="text-danger"
                       onClick={() => openDisputeModal(alert)}
                       disabled={actionLoadingId === alert.id}
                     >
-                      <AlertTriangle className="h-4 w-4 text-danger" />
-                      I Don't Recognise (Dispute)
+                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                      I don't recognise this
                     </Button>
                   </div>
-                )}
-              </div>
+                ) : null}
+              </Panel>
             )
           })}
         </div>
       )}
 
-      {/* Verified Indian Bank & Cybercrime Helplines Guide */}
-      <div className="rounded-2xl border border-line/60 bg-surface-card/60 p-5 space-y-4">
-        <div className="flex items-center gap-3">
-          <Phone className="h-5 w-5 text-primary" />
-          <h3 className="font-display text-sm font-bold text-ink">
-            Official Emergency Banking Helplines (24x7)
-          </h3>
-        </div>
-        <p className="text-xs text-muted leading-relaxed">
-          If you detect an unauthorised debit or suspected UPI phishing, call your bank's official emergency fraud helpline immediately to freeze your card or UPI handle:
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
-          {[
-            { bank: 'State Bank of India (SBI)', phone: '1800 11 1109 / 1800 425 3800' },
-            { bank: 'HDFC Bank', phone: '1800 1600 / 1800 266 4060' },
-            { bank: 'ICICI Bank', phone: '1800 1080' },
-            { bank: 'Axis Bank', phone: '1860 419 5555' },
-            { bank: 'Kotak Mahindra Bank', phone: '1860 266 2666' },
-            { bank: 'Punjab National Bank (PNB)', phone: '1800 1800 / 1800 2021' },
-          ].map((item, idx) => (
-            <div key={idx} className="rounded-xl border border-line/40 bg-surface/50 p-3">
-              <div className="font-semibold text-ink">{item.bank}</div>
-              <a href={`tel:${item.phone.split(' ')[0]}`} className="mt-1 block text-primary font-mono text-[11px] hover:underline">
+      <Panel className="mt-4">
+        <PanelHeader
+          title="Bank fraud helplines"
+          description="Call your bank directly to freeze a card or UPI handle. MoneyTrack cannot reverse a transaction."
+          action={<Phone className="h-4 w-4 text-muted" aria-hidden="true" />}
+        />
+        <div className="grid gap-2.5 p-4 sm:grid-cols-2 sm:p-5 md:grid-cols-3">
+          {HELPLINES.map((item) => (
+            <div
+              key={item.bank}
+              className="rounded-lg border border-border bg-surface-raised px-3.5 py-3"
+            >
+              <p className="text-[12px] font-medium text-text">{item.bank}</p>
+              <a
+                href={`tel:${item.phone.split(' ')[0]}`}
+                className="mt-1 block font-mono text-[11px] text-primary hover:underline"
+              >
                 {item.phone}
               </a>
             </div>
           ))}
         </div>
 
-        <div className="rounded-xl border border-primary/20 bg-primary/10 p-4 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-primary text-xs">National Cybercrime Helpline</span>
-            <span className="font-mono text-primary font-bold">1930</span>
+        <div className="mx-4 mb-4 rounded-lg border border-primary-border bg-primary-soft px-4 py-3 sm:mx-5 sm:mb-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12px] font-medium text-primary">National cybercrime helpline</p>
+            <a href="tel:1930" className="font-mono text-[14px] font-semibold text-primary">
+              1930
+            </a>
           </div>
-          <p className="text-[11px] text-muted">
-            Report financial fraud directly to the Ministry of Home Affairs at{' '}
+          <p className="mt-1 text-[11px] leading-5 text-muted">
+            Report financial fraud to the Ministry of Home Affairs at{' '}
             <a
               href="https://cybercrime.gov.in"
               target="_blank"
               rel="noreferrer"
-              className="text-primary underline font-medium"
+              className="font-medium text-primary underline"
             >
               cybercrime.gov.in
             </a>
+            .
           </p>
         </div>
-      </div>
+      </Panel>
 
-      {/* Dispute Modal */}
       <Modal
         open={disputeModalOpen}
         onClose={() => setDisputeModalOpen(false)}
-        title="Dispute Unrecognised Debit"
-        description="Flag this transaction as unrecognised and access verified bank emergency steps."
+        title="Dispute this debit"
+        description="Flag the charge as unrecognised and see the recommended emergency steps."
         footer={
-          <div className="flex w-full items-center justify-between gap-3">
+          <div className="flex w-full flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
             <Button variant="ghost" onClick={() => setDisputeModalOpen(false)}>
               Close
             </Button>
@@ -358,9 +369,9 @@ export default function SecurityCentrePage() {
               <Button
                 variant="danger"
                 onClick={handleConfirmDispute}
-                disabled={actionLoadingId !== null}
+                loading={actionLoadingId !== null}
               >
-                {actionLoadingId !== null ? 'Disputing...' : 'Register Dispute'}
+                Register dispute
               </Button>
             ) : (
               <Button variant="primary" onClick={() => setDisputeModalOpen(false)}>
@@ -370,67 +381,70 @@ export default function SecurityCentrePage() {
           </div>
         }
       >
-        <div className="space-y-4 py-2 text-xs text-muted">
-          {selectedAlert && (
-            <div className="rounded-xl bg-surface/60 p-3 border border-line flex items-center justify-between">
-              <div>
-                <div className="font-bold text-ink text-sm">
-                  {selectedAlert.merchant || 'Unfamiliar Recipient'}
-                </div>
-                <div className="text-[11px] text-muted">{selectedAlert.reason}</div>
+        <div className="space-y-4">
+          {selectedAlert ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised px-3.5 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-[13px] font-medium text-text">
+                  {selectedAlert.merchant || 'Unfamiliar recipient'}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-5 text-muted">{selectedAlert.reason}</p>
               </div>
-              <div className="font-display font-bold text-danger text-base">
-                {formatInr(selectedAlert.amount_paise)}
-              </div>
+              <p className="shrink-0 font-mono text-[14px] font-medium tabular-nums text-danger">
+                {formatINR(selectedAlert.amount_paise)}
+              </p>
             </div>
-          )}
+          ) : null}
 
           {!disputeResult ? (
-            <div className="space-y-2">
-              <label className="font-semibold text-ink">Dispute Reason (Optional)</label>
-              <textarea
+            <Field label="What happened?" optional>
+              <Textarea
                 value={disputeReason}
-                onChange={(e) => setDisputeReason(e.target.value)}
-                placeholder="e.g. I did not make this purchase, phone was in my bag, duplicate charge..."
+                onChange={(event) => setDisputeReason(event.target.value)}
+                placeholder="I did not make this purchase, my phone was not with me, duplicate charge…"
                 rows={3}
-                className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-muted/60 focus:border-primary focus:outline-none"
               />
-            </div>
+            </Field>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-danger font-semibold">
-                ✓ Dispute logged in MoneyTrack. The ledger entry is preserved for your records.
+              <div className="rounded-lg border border-danger-border bg-danger-soft px-3.5 py-3">
+                <p className="text-[12px] font-medium text-danger">Dispute recorded</p>
+                <p className="mt-0.5 text-[11px] leading-5 text-text">
+                  The ledger entry stays in your records. MoneyTrack does not contact the bank for
+                  you.
+                </p>
               </div>
 
-              {disputeResult.fraud_guidance && (
-                <div className="space-y-1.5">
-                  <div className="font-bold text-ink">Recommended Immediate Actions:</div>
-                  <ul className="list-disc pl-4 space-y-1 text-muted">
-                    {disputeResult.fraud_guidance.map((step, idx) => (
-                      <li key={idx}>{step}</li>
+              {disputeResult.fraud_guidance ? (
+                <div>
+                  <p className="text-[12px] font-medium text-text">Recommended immediate actions</p>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[11px] leading-5 text-muted">
+                    {disputeResult.fraud_guidance.map((step, index) => (
+                      <li key={index}>{step}</li>
                     ))}
                   </ul>
                 </div>
-              )}
+              ) : null}
 
-              <div className="rounded-xl border border-line bg-surface/50 p-3">
-                <div className="font-semibold text-ink">National Cybercrime Helpline:</div>
-                <div className="mt-1 font-mono text-sm font-bold text-primary">
-                  📞 {disputeResult.cybercrime_helpline || '1930'}
-                </div>
-                <div className="mt-1 text-[11px] text-muted">
-                  Report on portal: {disputeResult.cybercrime_url || 'https://cybercrime.gov.in'}
-                </div>
+              <div className="rounded-lg border border-border bg-surface-raised px-3.5 py-3">
+                <p className="text-[12px] font-medium text-text">National cybercrime helpline</p>
+                <p className="mt-1 font-mono text-[15px] font-semibold text-primary">
+                  {disputeResult.cybercrime_helpline || '1930'}
+                </p>
+                <p className="mt-1 break-all text-[11px] text-muted">
+                  {disputeResult.cybercrime_url || 'https://cybercrime.gov.in'}
+                </p>
               </div>
             </div>
           )}
 
-          <div className="rounded-xl bg-surface/30 p-2.5 text-[10px] text-muted leading-relaxed">
-            <span className="font-bold text-ink">Disclaimer: </span>
-            MoneyTrack is an offline-capable finance tracker that analyzes SMS notifications. MoneyTrack cannot reverse transactions or freeze bank funds directly. Please contact your bank directly using the helplines above.
-          </div>
+          <p className="rounded-lg border border-border bg-surface px-3 py-2.5 text-[10px] leading-5 text-muted">
+            <span className="font-medium text-text">Note: </span>
+            MoneyTrack reads SMS notifications and keeps your ledger. It cannot reverse a
+            transaction or freeze bank funds — use the helplines above.
+          </p>
         </div>
       </Modal>
-    </div>
+    </AppPage>
   )
 }

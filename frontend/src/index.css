@@ -1,3 +1,5 @@
+@import './styles/tokens.css';
+
 @font-face {
   font-family: 'Inter Variable';
   font-style: normal;
@@ -10,115 +12,7 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
-  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'Inter Variable', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-
-  /* Official Mercury Indigo Tokens (Light Mode) */
-  --primary: #5266eb;
-  --primary-hover: #4338ca;
-  --primary-soft: #eef1fe;
-  --primary-contrast: #ffffff;
-  --primary-gradient: #5266eb;
-  --accent-blue: #3b82f6;
-  --accent-navy: #0f172a;
-  --accent-rose: #e11d48;
-  --accent-amber: #d97706;
-
-  --bg: #f8fafc;
-  --sidebar: #ffffff;
-  --surface: #ffffff;
-  --surface-raised: #f1f5f9;
-  --text: #0f172a;
-  --muted: #475569;
-  --muted-2: #64748b;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
-
-  /* Semantic Financial Colors (Light Mode) */
-  --positive: #059669;
-  --positive-hover: #047857;
-  --positive-soft: #ecfdf5;
-  --positive-border: #a7f3d0;
-
-  --danger: #e11d48;
-  --danger-hover: #be123c;
-  --danger-soft: #fff1f2;
-  --danger-border: #fecdd3;
-  --danger-contrast: #ffffff;
-
-  --warning: #d97706;
-  --warning-soft: #fffbeb;
-  --warning-border: #fde68a;
-
-  /* Restrained, Clean Light Elevation (Soft tactile shadows) */
-  --shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.06);
-  --shadow-lg: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
-  --glass-blur: none;
-
-  /* Tailwind CSS compatibility variables */
-  --canvas: 248 250 252;
-  --line: 226 232 240;
-  --ink: 15 23 42;
-  --subtle: 100 116 139;
-  --navy: 15 23 42;
-  --gold: 217 119 6;
-}
-
-.dark {
-  color-scheme: dark;
-  /* Official Mercury Indigo & Obsidian Tokens (Dark Mode) - No Swamp Green, No Pure #000000 Black */
-  --primary: #6366f1;
-  --primary-hover: #818cf8;
-  --primary-soft: rgba(99, 102, 241, 0.14);
-  --primary-contrast: #ffffff;
-  --primary-gradient: #6366f1;
-  --accent-blue: #38bdf8;
-  --accent-navy: #0b0f19;
-  --accent-rose: #f43f5e;
-  --accent-amber: #f59e0b;
-
-  --bg: #0b0f19;
-  --sidebar: #0f1422;
-  --surface: #161b26;
-  --surface-raised: #1c2333;
-  --text: #f8fafc;
-  --muted: #94a3b8;
-  --muted-2: #64748b;
-  --border: #232b3b;
-  --border-strong: #333d52;
-
-  /* Semantic Financial Colors in Dark Mode */
-  --positive: #10b981;
-  --positive-hover: #059669;
-  --positive-soft: rgba(16, 185, 129, 0.14);
-  --positive-border: rgba(16, 185, 129, 0.28);
-
-  --danger: #f43f5e;
-  --danger-hover: #e11d48;
-  --danger-soft: rgba(244, 63, 94, 0.14);
-  --danger-border: rgba(244, 63, 94, 0.28);
-  --danger-contrast: #ffffff;
-
-  --warning: #f59e0b;
-  --warning-soft: rgba(245, 158, 11, 0.14);
-  --warning-border: rgba(245, 158, 11, 0.28);
-
-  /* Dark Elevation: Crisp step contrast + hairline separation, no glowing washes */
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 6px 18px rgba(0, 0, 0, 0.45);
-  --glass-blur: none;
-
-  /* Tailwind CSS compatibility variables */
-  --canvas: 11 15 25;
-  --line: 35 43 59;
-  --ink: 248 250 252;
-  --subtle: 148 163 184;
-  --navy: 248 250 252;
-  --gold: 245 158 11;
-}
+/* Design tokens live in ./styles/tokens.css */
 
 @layer base {
   *, ::before, ::after {
@@ -176,6 +70,35 @@
   .dark select option {
     background-color: #0f172a;
     color: #f8fafc;
+  }
+}
+
+/* Touch ergonomics: coarse pointers get at least 44px targets (WCAG 2.2 AA) */
+@media (pointer: coarse) {
+  .button {
+    min-height: 44px;
+  }
+
+  .button-sm {
+    min-height: 38px;
+  }
+
+  .button-icon,
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Respect user motion preferences (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -488,7 +411,7 @@
 }
 
 .button-primary {
-  color: #fff;
+  color: var(--primary-contrast);
   background: var(--primary);
   border: 1px solid transparent;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -529,7 +452,7 @@
 }
 
 .button-danger {
-  color: #fff;
+  color: var(--danger-contrast);
   background: var(--danger);
   border: 1px solid transparent;
 }
@@ -590,21 +513,21 @@
 }
 
 .dark .badge-positive, .dark .badge-success {
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.14);
-  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: var(--positive);
+  background: var(--positive-soft);
+  border: 1px solid var(--positive-border);
 }
 
 .badge-primary {
   color: var(--primary);
   background: var(--primary-soft);
-  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  border: 1px solid var(--primary-border);
 }
 
 .dark .badge-primary {
-  color: #818cf8;
-  background: rgba(99, 102, 241, 0.16);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-border);
 }
 
 .badge-warning {
@@ -614,9 +537,9 @@
 }
 
 .dark .badge-warning {
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px solid rgba(245, 158, 11, 0.28);
+  color: var(--warning);
+  background: var(--warning-soft);
+  border: 1px solid var(--warning-border);
 }
 
 .badge-danger {
@@ -626,9 +549,9 @@
 }
 
 .dark .badge-danger {
-  color: #f43f5e;
-  background: rgba(244, 63, 94, 0.14);
-  border: 1px solid rgba(244, 63, 94, 0.28);
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
 }
 
 /* Period Picker */
@@ -703,9 +626,9 @@
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   overflow: hidden;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--duration-fast) ease;
 }
 
 .card:hover {
@@ -1039,14 +962,14 @@
 }
 
 .modal {
-  background: var(--surface-raised);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 15px;
+  border-radius: var(--radius-panel);
   width: min(100%, 570px);
   max-height: calc(100vh - 32px);
-  animation: .22s modal-in;
+  animation: .22s modal-in var(--ease-standard);
   overflow-y: auto;
-  box-shadow: 0 25px 70px #00000038;
+  box-shadow: var(--shadow-lg);
 }
 
 .modal-header {
@@ -1086,17 +1009,18 @@
   width: 100%;
   height: 40px;
   color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
   padding: 0 11px;
   font-size: 13.5px;
   outline: none;
-  transition: border-color .15s ease;
+  transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
 }
 
 .field input:focus, .field select:focus, .field textarea:focus {
   border-color: var(--primary);
+  box-shadow: var(--shadow-focus);
 }
 
 .field textarea {
@@ -1106,13 +1030,15 @@
 }
 
 .modal-actions {
-  background: var(--bg);
+  background: var(--surface);
   border-top: 1px solid var(--border);
   justify-content: flex-end;
   gap: 8px;
-  margin: 8px -22px -22px;
-  padding: 16px 22px;
+  margin: 0;
+  padding: 14px 22px;
   display: flex;
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
 }
 
 /* Category Grid & Cards */
@@ -1321,7 +1247,7 @@
 }
 
 .theme-options button i {
-  color: #fff;
+  color: var(--primary-contrast);
   background: var(--primary);
   border-radius: 50%;
   place-items: center;
@@ -1405,7 +1331,7 @@
   height: 52px;
   border-radius: 50%;
   background: var(--primary);
-  color: #fff;
+  color: var(--primary-contrast);
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);

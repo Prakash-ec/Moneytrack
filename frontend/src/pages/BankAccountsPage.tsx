@@ -11,33 +11,43 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import { AppPage } from '@/components/AppPage'
 import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Field, Input, Select } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
+import { Panel } from '@/components/ui/Panel'
 import { EmptyState, ErrorState, PageSkeleton } from '@/components/ui/States'
 import { useApiQuery } from '@/hooks/useApiQuery'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import { useDataRefresh } from '@/providers/RefreshProvider'
 import { useToast } from '@/providers/ToastProvider'
 import { api } from '@/services/api'
 import type { AccountType, BankAccount, BankAccountCreateInput } from '@/types/api'
+import { cn } from '@/utils/cn'
 import { formatINR, parseRupeesToPaise } from '@/utils/currency'
-import { formatDate } from '@/utils/dates'
+import { formatDate, todayIST } from '@/utils/dates'
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  savings: 'Savings Account',
-  current: 'Current Account',
-  credit_card: 'Credit Card',
-  wallet: 'Digital Wallet',
-  cash: 'Physical Cash',
+  savings: 'Savings',
+  current: 'Current',
+  credit_card: 'Credit card',
+  wallet: 'Wallet',
+  cash: 'Cash',
+}
+
+function AccountIcon({ type }: { type: AccountType }) {
+  const Icon = type === 'credit_card' ? CreditCard : type === 'wallet' || type === 'cash' ? Wallet : Building2
+  return <Icon className="h-4 w-4" aria-hidden="true" />
 }
 
 export function BankAccountsPage() {
-  useDocumentTitle('Bank Accounts & Reconciliation')
+  useDocumentTitle('Accounts & Reconciliation')
+  const { invalidate } = useDataRefresh()
   const { showToast } = useToast()
 
-  // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null)
   const [formName, setFormName] = useState('')
@@ -45,35 +55,30 @@ export function BankAccountsPage() {
   const [formMask, setFormMask] = useState('')
   const [formType, setFormType] = useState<AccountType>('savings')
   const [formOpeningBalance, setFormOpeningBalance] = useState('')
-  const [formOpeningDate, setFormOpeningDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [formOpeningDate, setFormOpeningDate] = useState(() => todayIST())
   const [formIsPrimary, setFormIsPrimary] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Report balance dialog state
   const [reportingAccount, setReportingAccount] = useState<BankAccount | null>(null)
   const [reportBalanceInput, setReportBalanceInput] = useState('')
   const [reporting, setReporting] = useState(false)
 
-  // Recalculating state
   const [recalculatingId, setRecalculatingId] = useState<number | null>(null)
   const [reconcilingId, setReconcilingId] = useState<number | null>(null)
 
-  // Delete state
   const [deleteTarget, setDeleteTarget] = useState<BankAccount | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Query
   const accountsQuery = useApiQuery(['bank-accounts'], () => api.listBankAccounts(true))
   const accounts = accountsQuery.data?.items ?? []
-  const rawConsolidated =
-    accountsQuery.data?.consolidated_balance_paise ??
-    (accountsQuery.data as any)?.total_balance_paise ??
-    0
-  const reportedPaise = accountsQuery.data?.total_reported_balance_paise ?? 0
-  const consolidatedPaise = rawConsolidated !== 0 ? rawConsolidated : (reportedPaise || 0)
-  const discrepancyPaise = reportedPaise - (rawConsolidated || reportedPaise)
 
-  // Auto-refresh when SMS arrives or sync finishes
+  // Show the calculated total exactly as stored. Never substitute the reported
+  // total when the calculated total is zero — that would hide a real variance.
+  const calculatedPaise = accountsQuery.data?.consolidated_balance_paise ?? 0
+  const reportedPaise = accountsQuery.data?.total_reported_balance_paise
+  const hasReportedTotal = reportedPaise !== undefined && reportedPaise !== null
+  const discrepancyPaise = hasReportedTotal ? reportedPaise - calculatedPaise : 0
+
   useEffect(() => {
     const handleSmsChanged = () => {
       accountsQuery.refetch()
@@ -85,27 +90,23 @@ export function BankAccountsPage() {
   const openCreateDialog = () => {
     setEditingAccount(null)
     setFormName('')
-    setFormBankName('HDFC Bank')
+    setFormBankName('')
     setFormMask('')
     setFormType('savings')
     setFormOpeningBalance('0')
-    setFormOpeningDate(new Date().toISOString().slice(0, 10))
+    setFormOpeningDate(todayIST())
     setFormIsPrimary(accounts.length === 0)
     setIsDialogOpen(true)
   }
 
   const openEditDialog = (account: BankAccount) => {
     setEditingAccount(account)
-    setFormName(account.name || (account as any).account_name || '')
-    setFormBankName(account.bank_name || '')
+    setFormName(account.name)
+    setFormBankName(account.bank_name)
     setFormMask(account.account_number_mask ?? '')
     setFormType(account.account_type || 'savings')
     setFormOpeningBalance(((account.opening_balance_paise ?? 0) / 100).toString())
-    setFormOpeningDate(
-      account.opening_date ||
-        (account as any).opening_balance_date ||
-        new Date().toISOString().slice(0, 10),
-    )
+    setFormOpeningDate(account.opening_date || todayIST())
     setFormIsPrimary(Boolean(account.is_primary))
     setIsDialogOpen(true)
   }
@@ -113,7 +114,11 @@ export function BankAccountsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formName.trim() || !formBankName.trim()) {
-      showToast({ title: 'Validation Error', description: 'Name and bank name are required.', variant: 'error' })
+      showToast({
+        title: 'Missing account details',
+        description: 'A nickname and bank name are required.',
+        variant: 'error',
+      })
       return
     }
 
@@ -121,12 +126,11 @@ export function BankAccountsPage() {
 
     setSubmitting(true)
     try {
-      const maskVal = formMask.trim() || 'XX0000'
       const payload: BankAccountCreateInput & Record<string, unknown> = {
         name: formName.trim(),
         account_name: formName.trim(),
         bank_name: formBankName.trim(),
-        account_number_mask: maskVal,
+        account_number_mask: formMask.trim() || 'XX0000',
         account_type: formType,
         opening_balance_paise: openingPaise,
         opening_date: formOpeningDate,
@@ -136,18 +140,19 @@ export function BankAccountsPage() {
 
       if (editingAccount) {
         await api.updateBankAccount(editingAccount.id, payload)
-        showToast({ title: 'Account Updated', description: 'Bank account details updated.' })
+        showToast({ title: 'Account updated', description: 'Details saved.' })
       } else {
         await api.createBankAccount(payload)
-        showToast({ title: 'Account Added', description: 'New bank account linked to MoneyTrack.' })
+        showToast({ title: 'Account added', description: 'It can now receive expenses and income.' })
       }
 
       setIsDialogOpen(false)
+      invalidate()
       accountsQuery.refetch()
     } catch (err) {
       showToast({
-        title: 'Save Failed',
-        description: err instanceof Error ? err.message : 'Could not save bank account.',
+        title: 'Could not save account',
+        description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
@@ -159,12 +164,16 @@ export function BankAccountsPage() {
     setRecalculatingId(id)
     try {
       await api.recalculateAccountBalance(id)
-      showToast({ title: 'Balance Recalculated', description: 'Ledger transactions recalculated from ground up.' })
+      showToast({
+        title: 'Balance recalculated',
+        description: 'Every posted entry was replayed from the opening balance.',
+      })
+      invalidate()
       accountsQuery.refetch()
     } catch (err) {
       showToast({
-        title: 'Recalculation Failed',
-        description: err instanceof Error ? err.message : 'Error recalculating balance.',
+        title: 'Recalculation failed',
+        description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
@@ -176,13 +185,17 @@ export function BankAccountsPage() {
     setReconcilingId(id)
     try {
       await api.reconcileBankAccount(id)
-      showToast({ title: 'Account Reconciled', description: 'Opening balance calibrated to match bank statement.' })
+      showToast({
+        title: 'Account reconciled',
+        description: 'The opening balance was calibrated to the reported statement balance.',
+      })
+      invalidate()
       accountsQuery.refetch()
       window.dispatchEvent(new CustomEvent('moneytrack:sms-changed'))
     } catch (err) {
       showToast({
-        title: 'Reconciliation Failed',
-        description: err instanceof Error ? err.message : 'Error reconciling balance.',
+        title: 'Reconciliation failed',
+        description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
@@ -195,20 +208,28 @@ export function BankAccountsPage() {
     if (!reportingAccount) return
     const balancePaise = parseRupeesToPaise(reportBalanceInput)
     if (balancePaise === null) {
-      showToast({ title: 'Invalid Balance', description: 'Please enter a valid amount.', variant: 'error' })
+      showToast({
+        title: 'Invalid balance',
+        description: 'Enter an amount greater than zero.',
+        variant: 'error',
+      })
       return
     }
 
     setReporting(true)
     try {
       await api.reportBankBalance(reportingAccount.id, balancePaise)
-      showToast({ title: 'Reported Balance Updated', description: 'Bank statement snapshot recorded.' })
+      showToast({
+        title: 'Reported balance saved',
+        description: 'A bank statement snapshot was added to the audit trail.',
+      })
       setReportingAccount(null)
+      invalidate()
       accountsQuery.refetch()
     } catch (err) {
       showToast({
-        title: 'Update Failed',
-        description: err instanceof Error ? err.message : 'Could not update reported balance.',
+        title: 'Could not save balance',
+        description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
@@ -221,13 +242,14 @@ export function BankAccountsPage() {
     setDeleting(true)
     try {
       await api.deleteBankAccount(deleteTarget.id)
-      showToast({ title: 'Account Deleted', description: 'Bank account removed.' })
+      showToast({ title: 'Account deleted', description: 'Its historical entries remain in the ledger.' })
       setDeleteTarget(null)
+      invalidate()
       accountsQuery.refetch()
     } catch (err) {
       showToast({
-        title: 'Delete Failed',
-        description: err instanceof Error ? err.message : 'Could not delete bank account.',
+        title: 'Could not delete account',
+        description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
@@ -236,403 +258,405 @@ export function BankAccountsPage() {
   }
 
   if (accountsQuery.loading && !accountsQuery.data) {
-    return <PageSkeleton />
+    return (
+      <AppPage>
+        <PageSkeleton />
+      </AppPage>
+    )
   }
 
   if (accountsQuery.error) {
     return (
-      <div className="page">
+      <AppPage>
         <ErrorState
-          title="Could not load bank accounts"
-          description={accountsQuery.error instanceof Error ? accountsQuery.error.message : 'An error occurred'}
+          title="Could not load accounts"
+          description={
+            accountsQuery.error instanceof Error
+              ? accountsQuery.error.message
+              : 'The accounts request failed.'
+          }
           onRetry={() => accountsQuery.refetch()}
         />
-      </div>
+      </AppPage>
     )
   }
 
   return (
-    <div className="page">
+    <AppPage>
       <PageHeader
-        eyebrow="Banking & accounts"
-        title="Bank Accounts & Reconciliation"
-        description="Multi-account tracking with automatic SMS reconciliation"
+        eyebrow="Banking"
+        title="Accounts & reconciliation"
+        description="Calculated balances, bank-reported snapshots and the variance between them."
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="primary" onClick={openCreateDialog}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              <span>Add account</span>
-            </Button>
-          </div>
+          <Button variant="primary" onClick={openCreateDialog}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add account
+          </Button>
         }
       />
 
-      {/* Consolidated Balance Card */}
-      <div className="card p-5 sm:p-6 mb-6 bg-surface border border-border">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <Panel className="p-5 sm:p-6">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_auto] lg:items-start">
           <div>
-            <div className="text-xs font-medium text-muted mb-1 flex items-center gap-1.5">
-              <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
-              <span>Consolidated net balance</span>
-            </div>
-            <div className="text-3xl sm:text-4xl font-semibold text-text font-mono tabular-nums">
-              {formatINR(consolidatedPaise)}
-            </div>
-            <div className="text-xs text-muted mt-1">
-              Calculated across {accounts.length} active account{accounts.length === 1 ? '' : 's'} (Opening + Incomes - Expenses ± Transfers)
-            </div>
+            <p className="text-[11px] font-medium text-muted">Consolidated calculated balance</p>
+            <p className="mt-1.5 break-words font-mono text-[30px] font-medium leading-none tabular-nums tracking-[-0.03em] text-text sm:text-[34px]">
+              {formatINR(calculatedPaise)}
+            </p>
+            <p className="mt-2 max-w-sm text-[11px] leading-5 text-muted">
+              Opening balances plus every posted income, expense and transfer. Zero and negative
+              values are shown as they are.
+            </p>
           </div>
 
-          <div className="sm:text-right pt-3 sm:pt-0 border-t sm:border-t-0 border-border">
-            <div className="text-xs font-medium text-muted mb-1">
-              Bank-reported total (SMS)
-            </div>
-            <div className="text-2xl font-semibold text-text font-mono tabular-nums">
-              {formatINR(reportedPaise)}
-            </div>
-            <div className="mt-1.5">
-              {discrepancyPaise === 0 ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary-soft px-2 py-0.5 rounded-md">
-                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                  <span>Reconciled with SMS</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning bg-warning-soft px-2 py-0.5 rounded-md font-mono tabular-nums">
-                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                  <span>Variance: {formatINR(Math.abs(discrepancyPaise))}</span>
-                </span>
-              )}
-            </div>
+          <div>
+            <p className="text-[11px] font-medium text-muted">Last bank-reported total</p>
+            <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+              {hasReportedTotal ? formatINR(reportedPaise) : 'Not reported'}
+            </p>
+            <p className="mt-2 text-[11px] leading-5 text-muted">
+              {hasReportedTotal
+                ? 'Latest balance reported by SMS or a manual statement entry.'
+                : 'Add a reported balance on an account to start reconciliation.'}
+            </p>
+          </div>
+
+          <div className="sm:col-span-2 lg:col-span-1">
+            <p className="text-[11px] font-medium text-muted">Variance</p>
+            {!hasReportedTotal ? (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-raised px-2.5 py-1 text-[11px] font-medium text-muted">
+                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                Nothing to compare yet
+              </p>
+            ) : discrepancyPaise === 0 ? (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-positive-border bg-positive-soft px-2.5 py-1 text-[11px] font-medium text-positive">
+                <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                Reconciled
+              </p>
+            ) : (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-warning-border bg-warning-soft px-2.5 py-1 font-mono text-[11px] font-medium tabular-nums text-warning">
+                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                {formatINR(Math.abs(discrepancyPaise))} {discrepancyPaise > 0 ? 'reported above ledger' : 'reported below ledger'}
+              </p>
+            )}
+            <p className="mt-2 text-[11px] leading-5 text-muted">
+              {accounts.length} active account{accounts.length === 1 ? '' : 's'}
+            </p>
           </div>
         </div>
-      </div>
+      </Panel>
 
-      {/* Accounts List Grid */}
       {accounts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
           {accounts.map((account) => {
-            const accDiscrepancy = (account.last_reported_balance_paise ?? account.current_balance_paise) - account.current_balance_paise
-            const isReconciled = account.last_reported_balance_paise != null && accDiscrepancy === 0
+            const reported = account.last_reported_balance_paise
+            const variance = reported != null ? reported - account.current_balance_paise : null
+            const isReconciled = variance === 0
 
             return (
-              <div
-                key={account.id}
-                className="card p-5 hover:border-border-strong transition-colors flex flex-col justify-between"
-              >
-                <div>
-                  {/* Account Header */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-lg bg-surface-raised text-muted border border-border">
-                        {account.account_type === 'credit_card' ? (
-                          <CreditCard className="h-4 w-4" aria-hidden="true" />
-                        ) : account.account_type === 'cash' || account.account_type === 'wallet' ? (
-                          <Wallet className="h-4 w-4" aria-hidden="true" />
-                        ) : (
-                          <Building2 className="h-4 w-4" aria-hidden="true" />
+              <Panel key={account.id} className="flex flex-col p-4 sm:p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-raised text-muted">
+                      <AccountIcon type={account.account_type} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 text-[14px] font-semibold text-text">
+                        <span className="truncate">{account.name}</span>
+                        {account.is_primary ? <Badge tone="primary">Primary</Badge> : null}
+                      </p>
+                      <p className="truncate text-[11px] text-muted">
+                        {account.bank_name}
+                        {account.account_number_mask ? ` · ••${account.account_number_mask}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge tone="neutral">{ACCOUNT_TYPE_LABELS[account.account_type]}</Badge>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-border bg-surface-raised px-3.5 py-3">
+                  <p className="text-[10px] font-medium text-muted">Calculated balance</p>
+                  <p className="mt-1 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+                    {formatINR(account.current_balance_paise)}
+                  </p>
+
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2.5">
+                    <span className="text-[11px] text-muted">
+                      Reported{' '}
+                      <span className="font-mono tabular-nums text-text">
+                        {reported != null ? formatINR(reported) : '—'}
+                      </span>
+                    </span>
+                    {reported == null ? (
+                      <span className="text-[10px] text-muted">No snapshot yet</span>
+                    ) : isReconciled ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-positive">
+                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                        Matched
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          'font-mono text-[10px] font-medium tabular-nums',
+                          variance != null && variance > 0 ? 'text-warning' : 'text-danger',
                         )}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-base text-text flex items-center gap-2">
-                          <span>{account.name || (account as any).account_name}</span>
-                          {account.is_primary && (
-                            <Badge tone="primary">Primary</Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted font-mono tabular-nums">
-                          {account.bank_name} {account.account_number_mask && `· ••${account.account_number_mask}`}
-                        </div>
-                      </div>
-                    </div>
-
-                    <Badge tone="neutral">{ACCOUNT_TYPE_LABELS[account.account_type]}</Badge>
-                  </div>
-
-                  {/* Balance Display */}
-                  <div className="my-4 p-3.5 rounded-lg bg-surface-raised border border-border">
-                    <div className="flex items-baseline justify-between mb-2">
-                      <span className="text-xs font-medium text-muted">
-                        Current calculated balance
+                      >
+                        {variance != null ? formatINR(Math.abs(variance)) : '—'} variance
                       </span>
-                      <span className="text-xl sm:text-2xl font-semibold text-text font-mono tabular-nums">
-                        {formatINR(account.current_balance_paise || account.last_reported_balance_paise || 0)}
-                      </span>
-                    </div>
-
-                    <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs">
-                      <span className="text-muted flex items-center gap-1">
-                        <span>Latest SMS Balance:</span>
-                        <strong className="text-sky-300 font-mono">
-                          {account.last_reported_balance_paise != null
-                            ? formatINR(account.last_reported_balance_paise)
-                            : 'None reported'}
-                        </strong>
-                      </span>
-
-                      {account.last_reported_balance_paise != null && (
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            isReconciled
-                              ? 'bg-emerald-500/15 text-emerald-300'
-                              : 'bg-amber-500/15 text-amber-300'
-                          }`}
-                        >
-                          {isReconciled ? '✓ Matched' : `Δ ${formatINR(Math.abs(accDiscrepancy))}`}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Metadata */}
-                  <div className="text-[11px] text-muted space-y-1">
-                    <div>Opening Balance: {formatINR(account.opening_balance_paise)} on {formatDate(account.opening_date || (account as any).opening_balance_date)}</div>
-                    {account.last_reported_at && (
-                      <div>Last SMS Sync: {formatDate(account.last_reported_at)}</div>
                     )}
                   </div>
                 </div>
 
-                {/* Account Actions Bar */}
-                <div className="mt-5 pt-3 border-t border-border flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleRecalculate(account.id)}
-                      disabled={recalculatingId === account.id}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${recalculatingId === account.id ? 'animate-spin' : ''}`} aria-hidden="true" />
-                      <span>Recalculate</span>
-                    </button>
-                    {!isReconciled && account.last_reported_balance_paise != null && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={reconcilingId === account.id}
-                        onClick={() => handleReconcile(account.id)}
-                        className="text-xs h-7 px-2.5"
-                      >
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        <span>{reconcilingId === account.id ? 'Reconciling...' : 'Reconcile with SMS'}</span>
-                      </Button>
-                    )}
-                  </div>
+                <div className="mt-3 space-y-1 text-[11px] text-muted">
+                  <p>
+                    Opening {formatINR(account.opening_balance_paise)} on{' '}
+                    {formatDate(account.opening_date)}
+                  </p>
+                  {account.last_reported_at ? (
+                    <p>Last snapshot {formatDate(account.last_reported_at.slice(0, 10))}</p>
+                  ) : null}
+                </div>
 
-                  <div className="flex items-center gap-1">
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+                  <div className="flex items-center gap-1.5">
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       onClick={() => {
                         setReportingAccount(account)
                         setReportBalanceInput(
                           account.last_reported_balance_paise != null
                             ? (account.last_reported_balance_paise / 100).toString()
-                            : (account.current_balance_paise / 100).toString()
+                            : (account.current_balance_paise / 100).toString(),
                         )
                       }}
                     >
-                      Update Balance
+                      Update balance
                     </Button>
+                    {reported != null && !isReconciled ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        loading={reconcilingId === account.id}
+                        onClick={() => handleReconcile(account.id)}
+                      >
+                        Reconcile
+                      </Button>
+                    ) : null}
+                  </div>
 
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleRecalculate(account.id)}
+                      disabled={recalculatingId === account.id}
+                      className="flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-raised hover:text-text disabled:opacity-50"
+                      aria-label={`Recalculate ${account.name} from its opening balance`}
+                      title="Recalculate from ledger"
+                    >
+                      <RefreshCw
+                        className={cn('h-3.5 w-3.5', recalculatingId === account.id && 'animate-spin')}
+                        aria-hidden="true"
+                      />
+                    </button>
                     <button
                       type="button"
                       onClick={() => openEditDialog(account)}
-                      className="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface transition-colors"
-                      title="Edit"
+                      className="flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-raised hover:text-text"
+                      aria-label={`Edit ${account.name}`}
+                      title="Edit account"
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
-
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(account)}
-                      className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-surface transition-colors"
-                      title="Delete"
+                      className="flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+                      aria-label={`Delete ${account.name}`}
+                      title="Delete account"
                     >
                       <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
-              </div>
+              </Panel>
             )
           })}
         </div>
       ) : (
-        <div className="card p-8 text-center">
+        <Panel className="mt-4">
           <EmptyState
             icon={Building2}
-            title="No bank accounts added"
-            description="Add your savings accounts, current accounts, or wallets to track balances and auto-reconcile bank SMS."
+            title="No accounts yet"
+            description="Add a savings account, current account, card, wallet or cash balance. Reconciliation begins with the first reported balance."
             action={
               <Button variant="primary" onClick={openCreateDialog}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                <span>Add first bank account</span>
+                Add your first account
               </Button>
             }
           />
-        </div>
+        </Panel>
       )}
 
-      {/* Add / Edit Bank Account Modal */}
       <Modal
         open={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
-        title={editingAccount ? 'Edit Bank Account' : 'Add Bank Account'}
+        title={editingAccount ? 'Edit account' : 'Add account'}
+        description="The calculated balance starts from the opening balance and every posted entry."
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="secondary" type="button" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" type="button" disabled={submitting} onClick={handleSubmit}>
-              {submitting ? 'Saving...' : editingAccount ? 'Save Changes' : 'Add Account'}
+            <Button variant="primary" type="submit" form="account-form" loading={submitting}>
+              {editingAccount ? 'Save changes' : 'Add account'}
             </Button>
           </div>
         }
       >
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Account Nickname *</label>
-            <input
+        <form id="account-form" onSubmit={handleSubmit} className="space-y-4">
+          <Field label="Account nickname" required>
+            <Input
               type="text"
               required
               value={formName}
-              onChange={(e) => setFormName(e.target.value)}
-              placeholder="e.g. Salary Account, Emergency Fund"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
+              onChange={(event) => setFormName(event.target.value)}
+              placeholder="Salary account, emergency fund…"
             />
-          </div>
+          </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Bank Name *</label>
-              <input
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Bank or institution" required>
+              <Input
                 type="text"
                 required
                 value={formBankName}
-                onChange={(e) => setFormBankName(e.target.value)}
-                placeholder="e.g. HDFC Bank, SBI, ICICI"
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+                onChange={(event) => setFormBankName(event.target.value)}
+                placeholder="HDFC Bank, SBI, ICICI…"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Masked Suffix (Last 4 Digits)</label>
-              <input
+            <Field label="Last four digits" optional>
+              <Input
                 type="text"
                 maxLength={4}
                 value={formMask}
-                onChange={(e) => setFormMask(e.target.value.replace(/\D/g, ''))}
-                placeholder="e.g. 8824"
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs font-mono text-text focus:outline-none"
+                onChange={(event) => setFormMask(event.target.value.replace(/\D/g, ''))}
+                placeholder="8824"
+                inputMode="numeric"
+                className="font-mono"
               />
-            </div>
+            </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Account Type *</label>
-              <select
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Account type" required>
+              <Select
                 value={formType}
-                onChange={(e) => setFormType(e.target.value as AccountType)}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+                onChange={(event) => setFormType(event.target.value as AccountType)}
               >
-                <option value="savings">Savings Account</option>
-                <option value="current">Current Account</option>
-                <option value="credit_card">Credit Card</option>
-                <option value="wallet">Digital Wallet</option>
-                <option value="cash">Physical Cash</option>
-              </select>
-            </div>
+                <option value="savings">Savings account</option>
+                <option value="current">Current account</option>
+                <option value="credit_card">Credit card</option>
+                <option value="wallet">Digital wallet</option>
+                <option value="cash">Physical cash</option>
+              </Select>
+            </Field>
 
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Opening Date *</label>
-              <input
+            <Field label="Opening date" required>
+              <Input
                 type="date"
                 required
                 value={formOpeningDate}
-                onChange={(e) => setFormOpeningDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs text-text focus:outline-none"
+                onChange={(event) => setFormOpeningDate(event.target.value)}
               />
-            </div>
+            </Field>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Opening Balance (₹) *</label>
-            <input
+          <Field
+            label="Opening balance (₹)"
+            required
+            hint="Calculated balance = opening balance + income − expenses ± transfers."
+          >
+            <Input
               type="number"
               step="0.01"
               required
               value={formOpeningBalance}
-              onChange={(e) => setFormOpeningBalance(e.target.value)}
-              placeholder="Initial balance on opening date"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-sm font-semibold text-text focus:outline-none focus:ring-1 focus:ring-primary"
+              onChange={(event) => setFormOpeningBalance(event.target.value)}
+              placeholder="0.00"
+              inputMode="decimal"
+              className="font-mono tabular-nums"
             />
-            <span className="text-[11px] text-muted mt-1 block">
-              Calculated balance will be: Opening Balance + All Incomes - All Expenses ± Transfers
-            </span>
-          </div>
+          </Field>
 
-          <div className="flex items-center gap-2 pt-2">
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-surface-raised p-3">
             <input
               type="checkbox"
-              id="isPrimaryCheckbox"
               checked={formIsPrimary}
-              onChange={(e) => setFormIsPrimary(e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary"
+              onChange={(event) => setFormIsPrimary(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
             />
-            <label htmlFor="isPrimaryCheckbox" className="text-xs text-text select-none cursor-pointer">
-              Set as Primary Account (default for new expenses & incomes)
-            </label>
-          </div>
+            <span className="text-[12px] leading-5 text-text">
+              Set as primary account
+              <span className="block text-[11px] text-muted">
+                Used as the default account for new expenses and income.
+              </span>
+            </span>
+          </label>
         </form>
       </Modal>
 
-      {/* Manual Report Balance Modal */}
       <Modal
         open={Boolean(reportingAccount)}
         onClose={() => setReportingAccount(null)}
-        title={`Update Balance — ${reportingAccount?.name ?? ''}`}
+        title="Update reported balance"
+        description={
+          reportingAccount
+            ? `${reportingAccount.name} · record the latest balance the bank reported.`
+            : undefined
+        }
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="secondary" type="button" onClick={() => setReportingAccount(null)}>
               Cancel
             </Button>
-            <Button variant="primary" type="button" disabled={reporting} onClick={handleReportBalance}>
-              {reporting ? 'Updating...' : 'Save Statement Balance'}
+            <Button variant="primary" type="submit" form="report-balance-form" loading={reporting}>
+              Save snapshot
             </Button>
           </div>
         }
       >
-        <form onSubmit={handleReportBalance} className="space-y-3">
-          <p className="text-xs text-muted">
-            Record the latest balance reported by {reportingAccount?.bank_name} via SMS or netbanking. This allows MoneyTrack to detect missing entries or bank fees.
+        <form id="report-balance-form" onSubmit={handleReportBalance} className="space-y-4">
+          <p className="text-[12px] leading-5 text-muted">
+            This does not rewrite the calculated balance. It stores a bank-reported snapshot so the
+            variance can be reviewed.
           </p>
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Reported Balance (₹) *</label>
-            <input
+          <Field label="Reported balance (₹)" required>
+            <Input
               type="number"
               step="0.01"
               required
               value={reportBalanceInput}
-              onChange={(e) => setReportBalanceInput(e.target.value)}
-              placeholder="e.g. 45200.50"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-sm font-bold text-text focus:outline-none focus:ring-1 focus:ring-primary"
+              onChange={(event) => setReportBalanceInput(event.target.value)}
+              placeholder="0.00"
+              inputMode="decimal"
+              className="font-mono tabular-nums"
             />
-          </div>
+          </Field>
         </form>
       </Modal>
 
-      {/* Delete Confirmation */}
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="Delete Bank Account?"
-        description={`Are you sure you want to delete ${deleteTarget?.name}? Historical transactions linked to this account will remain in your records.`}
-        confirmLabel={deleting ? 'Deleting...' : 'Delete Account'}
+        title="Delete this account?"
+        description={`Delete ${deleteTarget?.name ?? 'this account'}? Its historical transactions stay in your ledger, but the account can no longer reconcile them.`}
+        confirmLabel="Delete account"
         tone="danger"
         loading={deleting}
         onConfirm={handleDelete}
         onClose={() => setDeleteTarget(null)}
       />
-    </div>
+    </AppPage>
   )
 }

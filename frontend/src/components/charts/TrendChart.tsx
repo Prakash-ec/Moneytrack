@@ -1,4 +1,3 @@
-import { useId } from 'react'
 import {
   Area,
   AreaChart,
@@ -15,10 +14,10 @@ import type { Granularity, TrendPoint } from '@/types/api'
 import { formatINR, formatINRCompact } from '@/utils/currency'
 import { formatDateShort, formatMonth } from '@/utils/dates'
 
-const AXIS_COLOR = '#94a3b8'
-const GRID_COLOR = 'rgba(148, 163, 184, 0.12)'
-const PRIMARY_INDIGO = '#6366f1'
-const DARK_INDIGO_STROKE = '#4f46e5'
+const AXIS_COLOR = 'var(--muted-2)'
+const GRID_COLOR = 'var(--border)'
+const ACCENT = 'var(--primary)'
+const ACCENT_SOFT = 'var(--primary-soft)'
 
 interface ChartDatum {
   date: string
@@ -46,10 +45,10 @@ function TrendTooltip({
         : formatDateShort(item.date)
 
   return (
-    <div className="rounded-xl border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3.5 py-2.5 shadow-2xl backdrop-blur-md">
-      <p className="text-[11px] font-semibold tracking-wide text-muted uppercase">{label}</p>
-      <p className="tabular mt-1 text-base font-bold text-text font-display">{formatINR(item.total)}</p>
-      <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted font-medium">
+    <div className="rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-lg">
+      <p className="text-[11px] font-medium text-muted">{label}</p>
+      <p className="mt-1 font-mono text-base font-semibold tabular-nums text-text">{formatINR(item.total)}</p>
+      <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-muted">
         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
         <span>
           {item.count} {item.count === 1 ? 'transaction' : 'transactions'}
@@ -72,8 +71,6 @@ export function TrendChart({
   height = 280,
   variant = 'area',
 }: TrendChartProps) {
-  const gradientId = `trend-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
-
   const data: ChartDatum[] = (series || []).map((point) => ({
     date: point.date,
     label:
@@ -118,7 +115,7 @@ export function TrendChart({
         tickFormatter={(value: number) => (value === 0 ? '₹0' : formatINRCompact(value))}
       />
       <Tooltip
-        cursor={{ stroke: PRIMARY_INDIGO, strokeWidth: 1.5, strokeDasharray: '3 3', fill: 'rgba(99, 102, 241, 0.08)' }}
+        cursor={{ stroke: ACCENT, strokeWidth: 1.5, strokeDasharray: '3 3', fill: ACCENT_SOFT }}
         content={<TrendTooltip granularity={granularity} />}
       />
     </>
@@ -138,7 +135,7 @@ export function TrendChart({
             <Bar
               dataKey="total"
               name="Outflow"
-              fill={PRIMARY_INDIGO}
+              fill={ACCENT}
               radius={[6, 6, 0, 0]}
               maxBarSize={38}
               animationDuration={500}
@@ -146,22 +143,16 @@ export function TrendChart({
           </BarChart>
         ) : (
           <AreaChart data={data} margin={{ top: 14, right: 12, left: -4, bottom: 4 }}>
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={PRIMARY_INDIGO} stopOpacity={0.35} />
-                <stop offset="65%" stopColor={DARK_INDIGO_STROKE} stopOpacity={0.08} />
-                <stop offset="100%" stopColor={DARK_INDIGO_STROKE} stopOpacity={0.0} />
-              </linearGradient>
-            </defs>
             {commonAxis}
             <Area
               type="monotone"
               dataKey="total"
               name="Outflow"
-              stroke={DARK_INDIGO_STROKE}
-              strokeWidth={2.5}
-              fill={`url(#${gradientId})`}
-              activeDot={{ r: 5, strokeWidth: 2, stroke: '#ffffff', fill: PRIMARY_INDIGO }}
+              stroke={ACCENT}
+              strokeWidth={2}
+              fill={ACCENT}
+              fillOpacity={0.08}
+              activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--surface)', fill: ACCENT }}
               animationDuration={500}
             />
           </AreaChart>

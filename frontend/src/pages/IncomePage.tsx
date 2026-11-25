@@ -10,29 +10,37 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 
+import { AppPage } from '@/components/AppPage'
 import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
 import { TypeSelectSheet } from '@/components/TypeSelectSheet'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Field, Input, Select, Textarea } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
+import { Panel } from '@/components/ui/Panel'
 import { EmptyState, ErrorState, PageSkeleton } from '@/components/ui/States'
 import { useApiQuery } from '@/hooks/useApiQuery'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { usePeriod } from '@/hooks/usePeriod'
+import { useDataRefresh } from '@/providers/RefreshProvider'
 import { useToast } from '@/providers/ToastProvider'
 import { api, ApiError } from '@/services/api'
 import { enqueueOfflineIncome } from '@/services/offlineQueue'
 import type { BankAccount, Income, IncomeCreateInput, IncomeType } from '@/types/api'
+import { cn } from '@/utils/cn'
 import { formatINR, parseRupeesToPaise } from '@/utils/currency'
-import { formatDate } from '@/utils/dates'
+import { formatDate, todayIST } from '@/utils/dates'
 import { formatRangeLabel } from '@/utils/periods'
+
+const PAYMENT_METHODS = ['UPI', 'Bank Transfer', 'Cash', 'Debit Card', 'Other']
 
 export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Income & Inflows')
   const period = usePeriod()
+  const { invalidate } = useDataRefresh()
   const { showToast } = useToast()
   const { start, end } = period.range
 
@@ -48,7 +56,7 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
   const [formAmount, setFormAmount] = useState('')
   const [formTypeId, setFormTypeId] = useState<number | ''>('')
   const [formAccountId, setFormAccountId] = useState<number | ''>('')
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [formDate, setFormDate] = useState(() => todayIST())
   const [formPayer, setFormPayer] = useState('')
   const [formPaymentMethod, setFormPaymentMethod] = useState('UPI')
   const [formReference, setFormReference] = useState('')
@@ -59,9 +67,11 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
   const [deleteTarget, setDeleteTarget] = useState<Income | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Queries
   const incomeTypesQuery = useApiQuery(['income-types'], () => api.listIncomeTypes())
   const bankAccountsQuery = useApiQuery(['bank-accounts'], () => api.listBankAccounts())
+  const cashflowQuery = useApiQuery(['cashflow', start, end], () =>
+    api.getCashFlowSummary({ start_date: start, end_date: end }),
+  )
   const incomesQuery = useApiQuery(
     ['incomes', start, end, page, debouncedSearch, selectedAccountId, selectedTypeId],
     () =>
@@ -77,19 +87,18 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
   )
 
   const incomes = incomesQuery.data?.items ?? []
-  const rawTypes = incomeTypesQuery.data
-  const incomeTypes: IncomeType[] = Array.isArray(rawTypes)
-    ? rawTypes
-    : (rawTypes as any)?.items ?? []
+  const incomeTypes: IncomeType[] = incomeTypesQuery.data ?? []
   const bankAccounts: BankAccount[] = bankAccountsQuery.data?.items ?? []
-  const totalInflowPaise = incomes.reduce((sum, item) => sum + item.amount_paise, 0)
+  const pageInflowPaise = incomes.reduce((sum, item) => sum + item.amount_paise, 0)
+  const cashflow = cashflowQuery.data
+  const hasFilters = Boolean(debouncedSearch || selectedAccountId || selectedTypeId)
 
   const openCreateDialog = () => {
     setEditingIncome(null)
     setFormAmount('')
     setFormTypeId(incomeTypes[0]?.id ?? '')
     setFormAccountId(bankAccounts[0]?.id ?? '')
-    setFormDate(new Date().toISOString().slice(0, 10))
+    setFormDate(todayIST())
     setFormPayer('')
     setFormPaymentMethod('UPI')
     setFormReference('')
@@ -114,11 +123,19 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
     e.preventDefault()
     const amountPaise = parseRupeesToPaise(formAmount)
     if (!amountPaise || amountPaise <= 0) {
-      showToast({ title: 'Invalid Amount', description: 'Please enter a valid amount greater than zero.', variant: 'error' })
+      showToast({
+        title: 'Invalid amount',
+        description: 'Enter an amount greater than zero.',
+        variant: 'error',
+      })
       return
     }
     if (!formTypeId) {
-      showToast({ title: 'Category Required', description: 'Please choose an income category.', variant: 'error' })
+      showToast({
+        title: 'Category required',
+        description: 'Choose an income category.',
+        variant: 'error',
+      })
       return
     }
 
@@ -137,29 +154,31 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
     try {
       if (editingIncome) {
         await api.updateIncome(editingIncome.id, payload)
-        showToast({ title: 'Income Updated', description: 'Changes saved successfully.' })
+        showToast({ title: 'Income updated', description: 'Changes saved to your ledger.' })
       } else {
         await api.createIncome(payload)
-        showToast({ title: 'Income Recorded', description: 'New income added to ledger.' })
+        showToast({ title: 'Income recorded', description: 'Added to your ledger.' })
       }
 
       setIsDialogOpen(false)
+      invalidate()
       incomesQuery.refetch()
       bankAccountsQuery.refetch()
+      cashflowQuery.refetch()
     } catch (err) {
       if (!editingIncome && err instanceof ApiError && err.status === 0) {
         enqueueOfflineIncome(payload)
         showToast({
           title: 'Income queued offline',
-          description: 'Saved on your device. It will automatically sync when reconnected.',
+          description: 'Saved on this device. It will sync when the connection returns.',
           variant: 'info',
         })
         setIsDialogOpen(false)
         return
       }
       showToast({
-        title: 'Save Failed',
-        description: err instanceof Error ? err.message : 'Could not save income.',
+        title: 'Could not save income',
+        description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
@@ -172,14 +191,16 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
     setDeleting(true)
     try {
       await api.deleteIncome(deleteTarget.id)
-      showToast({ title: 'Income Deleted', description: 'Income transaction removed.' })
+      showToast({ title: 'Income deleted', description: 'Removed from your ledger.' })
       setDeleteTarget(null)
+      invalidate()
       incomesQuery.refetch()
       bankAccountsQuery.refetch()
+      cashflowQuery.refetch()
     } catch (err) {
       showToast({
-        title: 'Delete Failed',
-        description: err instanceof Error ? err.message : 'Could not delete income.',
+        title: 'Could not delete income',
+        description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       })
     } finally {
@@ -187,386 +208,439 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
     }
   }
 
-  if (incomesQuery.loading && !incomesQuery.data) {
-    return <PageSkeleton />
-  }
+  const content = (() => {
+    if (incomesQuery.loading && !incomesQuery.data) {
+      return <PageSkeleton />
+    }
 
-  if (incomesQuery.error) {
-    return (
-      <div className="page">
+    if (incomesQuery.error) {
+      return (
         <ErrorState
           title="Could not load income"
-          description={incomesQuery.error instanceof Error ? incomesQuery.error.message : 'An error occurred'}
+          description={
+            incomesQuery.error instanceof Error
+              ? incomesQuery.error.message
+              : 'The income request failed.'
+          }
           onRetry={() => incomesQuery.refetch()}
         />
-      </div>
-    )
-  }
+      )
+    }
 
-  return (
-    <div className={embedded ? '' : 'page'}>
-      {!embedded && (
-        <PageHeader
-          eyebrow="Cashflow"
-          title="Income & Earnings"
-          description={`${formatRangeLabel(period.range)} · Inflows`}
-          actions={
-            <div className="flex items-center gap-2">
-              <PeriodPicker
-                preset={period.preset}
-                range={period.range}
-                onPresetChange={period.setPreset}
-                onCustomChange={period.setCustomRange}
-              />
-              <Button variant="primary" onClick={openCreateDialog}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                <span>Add income</span>
-              </Button>
-            </div>
-          }
-        />
-      )}
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-        <div className="card p-4 sm:p-5">
-          <div className="text-xs font-medium text-muted mb-1">
-            Total inflow
-          </div>
-          <div className="text-2xl sm:text-3xl font-semibold text-primary font-mono tabular-nums">
-            {formatINR(totalInflowPaise)}
-          </div>
-          <div className="text-[11px] text-muted mt-1">
-            {incomesQuery.data?.total ?? 0} transaction{(incomesQuery.data?.total ?? 0) === 1 ? '' : 's'}
-          </div>
-        </div>
-
-        <div className="card p-4 sm:p-5">
-          <div className="text-xs font-medium text-muted mb-1">
-            Average inflow
-          </div>
-          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
-            {incomes.length > 0 ? formatINR(Math.round(totalInflowPaise / incomes.length)) : '₹0'}
-          </div>
-          <div className="text-[11px] text-muted mt-1">Per recorded transaction</div>
-        </div>
-
-        <div className="card p-4 sm:p-5">
-          <div className="text-xs font-medium text-muted mb-1">
-            Linked accounts
-          </div>
-          <div className="text-2xl sm:text-3xl font-semibold text-text font-mono tabular-nums">
-            {bankAccounts.length}
-          </div>
-          <div className="text-[11px] text-muted mt-1">Active receiving accounts</div>
-        </div>
-      </div>
-
-      {/* Filters Bar */}
-      <div className="card p-3 sm:p-4 mb-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" aria-hidden="true" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search payer, note, reference…"
-            className="w-full pl-9 pr-8 py-2 rounded-lg bg-surface border border-border text-xs text-text placeholder:text-muted focus:outline-none focus:border-primary"
+    return (
+      <>
+        {!embedded ? (
+          <PageHeader
+            eyebrow="Cashflow"
+            title="Income & inflows"
+            description={`${formatRangeLabel(period.range)} · Asia/Kolkata`}
+            actions={
+              <>
+                <PeriodPicker
+                  preset={period.preset}
+                  range={period.range}
+                  onPresetChange={period.setPreset}
+                  onCustomChange={period.setCustomRange}
+                />
+                <Button variant="primary" onClick={openCreateDialog}>
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Add income
+                </Button>
+              </>
+            }
           />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-text"
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Panel className="p-4">
+            <p className="text-[11px] font-medium text-muted">Income in period</p>
+            <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-positive">
+              {cashflow ? formatINR(cashflow.total_income_paise) : '—'}
+            </p>
+            <p className="mt-1 text-[11px] text-muted">
+              {cashflow ? 'Every inflow recorded in this range' : 'Loading period total…'}
+            </p>
+          </Panel>
+
+          <Panel className="p-4">
+            <p className="text-[11px] font-medium text-muted">Income entries</p>
+            <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+              {incomesQuery.data?.total ?? 0}
+            </p>
+            <p className="mt-1 text-[11px] text-muted">
+              {hasFilters ? 'Matching your filters' : 'Recorded in this range'}
+            </p>
+          </Panel>
+
+          <Panel className="p-4">
+            <p className="text-[11px] font-medium text-muted">Net cashflow</p>
+            <p
+              className={cn(
+                'mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em]',
+                cashflow && cashflow.net_cashflow_paise < 0 ? 'text-danger' : 'text-text',
+              )}
             >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          )}
+              {cashflow
+                ? `${cashflow.net_cashflow_paise < 0 ? '−' : '+'}${formatINR(
+                    Math.abs(cashflow.net_cashflow_paise),
+                  )}`
+                : '—'}
+            </p>
+            <p className="mt-1 text-[11px] text-muted">
+              Income minus expenses for the period
+            </p>
+          </Panel>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-          <select
-            value={selectedAccountId ?? ''}
-            onChange={(e) => setSelectedAccountId(e.target.value ? Number(e.target.value) : undefined)}
-            className="py-2 px-3 rounded-lg bg-surface border border-border text-xs text-text focus:outline-none"
-          >
-            <option value="">All accounts</option>
-            {bankAccounts.map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                {acc.name} ({acc.bank_name})
-              </option>
-            ))}
-          </select>
+        <Panel className="mt-4 overflow-hidden">
+          <div className="flex flex-col gap-2 border-b border-border p-3 sm:flex-row sm:items-center sm:p-4">
+            <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-surface px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+              <Search className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span className="sr-only">Search income</span>
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPage(1)
+                }}
+                placeholder="Search payer, note or reference"
+                className="h-full w-full min-w-0 bg-transparent text-[13px] text-text outline-none placeholder:text-muted"
+              />
+              {search ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('')
+                    setPage(1)
+                  }}
+                  aria-label="Clear search"
+                  className="shrink-0 text-muted hover:text-text"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              ) : null}
+            </label>
 
-          <select
-            value={selectedTypeId ?? ''}
-            onChange={(e) => setSelectedTypeId(e.target.value ? Number(e.target.value) : undefined)}
-            className="py-2 px-3 rounded-lg bg-surface border border-border text-xs text-text focus:outline-none"
-          >
-            <option value="">All categories</option>
-            {incomeTypes.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+            <div className="flex items-center gap-2">
+              <Select
+                value={selectedAccountId ?? ''}
+                onChange={(event) => {
+                  setSelectedAccountId(
+                    event.target.value ? Number(event.target.value) : undefined,
+                  )
+                  setPage(1)
+                }}
+                aria-label="Filter by bank account"
+                className="h-9 text-[12px]"
+              >
+                <option value="">All accounts</option>
+                {bankAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({acc.bank_name})
+                  </option>
+                ))}
+              </Select>
 
-      {/* Income List */}
-      {incomes.length > 0 ? (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-surface-raised border-b border-border text-muted font-medium text-xs">
-                <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Source / payer</th>
-                  <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4">Account</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
-                  <th className="py-3 px-4 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {incomes.map((income) => (
-                  <tr key={income.id} className="hover:bg-surface-raised/50 transition-colors">
-                    <td className="py-3.5 px-4 font-mono tabular-nums text-muted whitespace-nowrap">
-                      {formatDate(income.income_date)}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-medium text-text">
-                        {income.payer || income.income_type?.name || 'Income'}
+              <Select
+                value={selectedTypeId ?? ''}
+                onChange={(event) => {
+                  setSelectedTypeId(event.target.value ? Number(event.target.value) : undefined)
+                  setPage(1)
+                }}
+                aria-label="Filter by income category"
+                className="h-9 text-[12px]"
+              >
+                <option value="">All categories</option>
+                {incomeTypes.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            {embedded ? (
+              <Button variant="primary" size="sm" onClick={openCreateDialog} className="shrink-0">
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                Add income
+              </Button>
+            ) : null}
+          </div>
+
+          {incomes.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-raised px-4 py-2 text-[11px] sm:px-5">
+                <span className="text-muted">
+                  {incomesQuery.data?.total ?? 0} entr
+                  {(incomesQuery.data?.total ?? 0) === 1 ? 'y' : 'ies'}
+                  {hasFilters ? ' matching filters' : ''}
+                </span>
+                <span className="font-mono tabular-nums text-text">
+                  Page total {formatINR(pageInflowPaise)}
+                </span>
+              </div>
+
+              <ul className="divide-y divide-border">
+                {incomes.map((income) => {
+                  const account = income.account ?? null
+                  return (
+                    <li key={income.id} className="group flex items-start gap-3 px-4 py-3.5 sm:px-5">
+                      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-positive-soft text-positive">
+                        <ArrowDownLeft className="h-4 w-4" aria-hidden="true" />
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <p className="truncate text-[13px] font-medium text-text">
+                            {income.payer?.trim() || income.income_type?.name || 'Income'}
+                          </p>
+                          <p className="shrink-0 font-mono text-[13px] font-medium tabular-nums text-positive">
+                            +{formatINR(income.amount_paise)}
+                          </p>
+                        </div>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
+                          <span>{formatDate(income.income_date)}</span>
+                          <span aria-hidden="true">·</span>
+                          <Badge tone="neutral">{income.income_type?.name ?? 'General'}</Badge>
+                          {account ? (
+                            <span className="truncate">
+                              {account.bank_name}
+                              {account.account_number_mask ? ` ••${account.account_number_mask}` : ''}
+                            </span>
+                          ) : (
+                            <span>No account linked</span>
+                          )}
+                          {income.reference ? (
+                            <span className="truncate font-mono text-[10px] text-subtle">
+                              Ref {income.reference}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {income.note ? (
+                          <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-muted">
+                            {income.note}
+                          </p>
+                        ) : null}
                       </div>
-                      {income.note && (
-                        <div className="text-[11px] text-muted truncate max-w-xs">{income.note}</div>
-                      )}
-                      {income.reference && (
-                        <div className="text-[10px] font-mono tabular-nums text-muted/75">Ref: {income.reference}</div>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <Badge tone="positive">{income.income_type?.name ?? 'General'}</Badge>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {income.account || (income as any).bank_account ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted bg-surface-raised px-2 py-0.5 rounded-md border border-border font-mono tabular-nums">
-                          {(income.account || (income as any).bank_account)?.bank_name}
-                          {(income.account || (income as any).bank_account)?.account_number_mask &&
-                            ` · ••${(income.account || (income as any).bank_account)?.account_number_mask}`}
-                        </span>
-                      ) : (
-                        <span className="text-muted text-[11px]">Unlinked</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-primary text-sm whitespace-nowrap">
-                      +{formatINR(income.amount_paise)}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
+
+                      <div className="flex shrink-0 items-center gap-0.5">
                         <button
                           type="button"
                           onClick={() => openEditDialog(income)}
-                          className="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface transition-colors"
-                          title="Edit"
+                          className="flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-raised hover:text-text"
+                          aria-label={`Edit income of ${formatINR(income.amount_paise)} on ${formatDate(income.income_date)}`}
                         >
                           <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(income)}
-                          className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-surface transition-colors"
-                          title="Delete"
+                          className="flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+                          aria-label={`Delete income of ${formatINR(income.amount_paise)} on ${formatDate(income.income_date)}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </li>
+                  )
+                })}
+              </ul>
 
-          {/* Pagination */}
-          {incomesQuery.data && incomesQuery.data.pages > 1 && (
-            <div className="p-3 border-t border-border flex items-center justify-between text-xs">
-              <span className="text-muted">
-                Page {page} of {incomesQuery.data.pages} ({incomesQuery.data.total} total)
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={page >= incomesQuery.data.pages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="card p-8 text-center">
-          <EmptyState
-            icon={ArrowDownLeft}
-            title="No income recorded"
-            description="No earnings recorded for this period. Add salary, freelance payment, cashback, or refund."
-            action={
-              <Button variant="primary" onClick={openCreateDialog}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                <span>Add first income</span>
-              </Button>
-            }
-          />
-        </div>
-      )}
-
-      {/* Add / Edit Income Modal */}
-      <Modal
-        open={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        title={editingIncome ? 'Edit Income' : 'Record Income'}
-        footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="secondary" type="button" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="button" disabled={submitting} onClick={handleSubmit}>
-              {submitting ? 'Saving...' : editingIncome ? 'Save Changes' : 'Record Income'}
-            </Button>
-          </div>
-        }
-      >
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Amount (₹) *</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              required
-              value={formAmount}
-              onChange={(e) => setFormAmount(e.target.value)}
-              placeholder="e.g. 50000"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-sm font-semibold text-text focus:outline-none focus:ring-1 focus:ring-primary"
+              {incomesQuery.data && incomesQuery.data.pages > 1 ? (
+                <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3 text-[11px] text-muted sm:px-5">
+                  <span>
+                    Page {incomesQuery.data.page} of {incomesQuery.data.pages}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={page <= 1}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={page >= incomesQuery.data.pages}
+                      onClick={() => setPage((current) => current + 1)}
+                    >
+                      Next
+                      <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <EmptyState
+              icon={ArrowDownLeft}
+              title={hasFilters ? 'No matching income' : 'No income recorded'}
+              description={
+                hasFilters
+                  ? 'No inflow matched this search and date range. Clear the filters to see everything.'
+                  : 'Record salary, freelance payments, cashback or refunds to complete the cashflow picture.'
+              }
+              action={
+                hasFilters ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setSearch('')
+                      setSelectedAccountId(undefined)
+                      setSelectedTypeId(undefined)
+                      setPage(1)
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button variant="primary" onClick={openCreateDialog}>
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    Add income
+                  </Button>
+                )
+              }
             />
-          </div>
+          )}
+        </Panel>
 
-          <div>
+        <Modal
+          open={isDialogOpen}
+          onClose={() => setIsDialogOpen(false)}
+          title={editingIncome ? 'Edit income' : 'Record income'}
+          description="The amount is stored exactly as entered, in paise."
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="secondary" type="button" onClick={() => setIsDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                form="income-form"
+                loading={submitting}
+              >
+                {editingIncome ? 'Save changes' : 'Record income'}
+              </Button>
+            </div>
+          }
+        >
+          <form id="income-form" onSubmit={handleSubmit} className="space-y-4">
+            <Field label="Amount (₹)" required>
+              <Input
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                value={formAmount}
+                onChange={(event) => setFormAmount(event.target.value)}
+                placeholder="0.00"
+                inputMode="decimal"
+                className="font-mono text-[15px] tabular-nums"
+              />
+            </Field>
+
             <TypeSelectSheet
-              label="Income Category *"
+              label="Income category"
               value={formTypeId}
               onChange={(newId) => setFormTypeId(Number(newId))}
               options={incomeTypes}
               placeholder="Select income category…"
               suggestions={incomeTypes.slice(0, 4)}
             />
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Bank Account</label>
-              <select
-                value={formAccountId}
-                onChange={(e) => setFormAccountId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
-              >
-                <option value="">No account</option>
-                {bankAccounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.bank_name})
-                  </option>
-                ))}
-              </select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Bank account">
+                <Select
+                  value={formAccountId}
+                  onChange={(event) =>
+                    setFormAccountId(event.target.value ? Number(event.target.value) : '')
+                  }
+                >
+                  <option value="">No account</option>
+                  {bankAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.bank_name})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              <Field label="Date" required>
+                <Input
+                  type="date"
+                  required
+                  value={formDate}
+                  onChange={(event) => setFormDate(event.target.value)}
+                />
+              </Field>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Date *</label>
-              <input
-                type="date"
-                required
-                value={formDate}
-                onChange={(e) => setFormDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
-              />
-            </div>
-          </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Payment method">
+                <Select
+                  value={formPaymentMethod}
+                  onChange={(event) => setFormPaymentMethod(event.target.value)}
+                >
+                  {PAYMENT_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {method === 'Bank Transfer' ? 'Bank transfer (NEFT/IMPS)' : method}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Payment Method</label>
-              <select
-                value={formPaymentMethod}
-                onChange={(e) => setFormPaymentMethod(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
-              >
-                <option value="UPI">UPI</option>
-                <option value="Bank Transfer">Bank Transfer (NEFT/IMPS)</option>
-                <option value="Cash">Cash Deposit</option>
-                <option value="Debit Card">Card</option>
-                <option value="Other">Other</option>
-              </select>
+              <Field label="Source or payer">
+                <Input
+                  type="text"
+                  value={formPayer}
+                  onChange={(event) => setFormPayer(event.target.value)}
+                  placeholder="Employer, client, platform"
+                />
+              </Field>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-text mb-1">Source / Payer</label>
-              <input
+            <Field label="Reference or transaction ID" optional>
+              <Input
                 type="text"
-                value={formPayer}
-                onChange={(e) => setFormPayer(e.target.value)}
-                placeholder="e.g. Acme Corp, Client, Google Pay"
-                className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
+                value={formReference}
+                onChange={(event) => setFormReference(event.target.value)}
+                placeholder="UTR, UPI reference, cheque number"
+                className="font-mono text-[12px]"
               />
-            </div>
-          </div>
+            </Field>
 
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Reference / Txn ID</label>
-            <input
-              type="text"
-              value={formReference}
-              onChange={(e) => setFormReference(e.target.value)}
-              placeholder="e.g. UPI/328491823901"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none"
-            />
-          </div>
+            <Field label="Note" optional>
+              <Textarea
+                rows={2}
+                value={formNote}
+                onChange={(event) => setFormNote(event.target.value)}
+                placeholder="What this inflow was for"
+              />
+            </Field>
+          </form>
+        </Modal>
 
-          <div>
-            <label className="block text-xs font-semibold text-text mb-1">Note</label>
-            <textarea
-              rows={2}
-              value={formNote}
-              onChange={(e) => setFormNote(e.target.value)}
-              placeholder="Optional description"
-              className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-base sm:text-xs text-text focus:outline-none resize-none"
-            />
-          </div>
-        </form>
-      </Modal>
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          title="Delete this income?"
+          description={`Delete ${deleteTarget ? formatINR(deleteTarget.amount_paise) : 'this income'}? The linked account balance will be recalculated. This cannot be undone.`}
+          confirmLabel="Delete"
+          tone="danger"
+          loading={deleting}
+          onConfirm={handleDelete}
+          onClose={() => setDeleteTarget(null)}
+        />
+      </>
+    )
+  })()
 
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        title="Delete Income Transaction?"
-        description={`Are you sure you want to delete this income of ${
-          deleteTarget ? formatINR(deleteTarget.amount_paise) : ''
-        }? This will automatically recalculate the associated bank account's balance.`}
-        confirmLabel={deleting ? 'Deleting...' : 'Delete'}
-        tone="danger"
-        loading={deleting}
-        onConfirm={handleDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
-    </div>
-  )
+  if (embedded) return <div>{content}</div>
+  return <AppPage>{content}</AppPage>
 }

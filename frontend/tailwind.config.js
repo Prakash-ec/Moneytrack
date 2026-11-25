@@ -6,15 +6,20 @@ export default {
     extend: {
       colors: {
         canvas: 'var(--bg)',
+        background: 'var(--bg)',
         bg: 'var(--bg)',
         surface: {
           DEFAULT: 'var(--surface)',
           raised: 'var(--surface-raised)',
+          card: 'var(--surface)',
+          hover: 'var(--surface-raised)',
         },
         elevated: 'var(--surface-raised)',
+        accent: 'var(--accent)',
         border: {
           DEFAULT: 'var(--border)',
           strong: 'var(--border-strong)',
+          input: 'var(--border-input)',
         },
         line: 'var(--border)',
         text: 'var(--text)',
@@ -27,6 +32,8 @@ export default {
           DEFAULT: 'var(--primary)',
           hover: 'var(--primary-hover)',
           soft: 'var(--primary-soft)',
+          ink: 'var(--primary-ink)',
+          border: 'var(--primary-border)',
           contrast: 'var(--primary-contrast)',
         },
         positive: {
@@ -47,6 +54,18 @@ export default {
           soft: 'var(--warning-soft)',
           border: 'var(--warning-border)',
         },
+        info: {
+          DEFAULT: 'var(--info)',
+          soft: 'var(--info-soft)',
+          border: 'var(--info-border)',
+        },
+      },
+      spacing: {
+        4.5: '1.125rem',
+        18: '4.5rem',
+      },
+      borderWidth: {
+        5: '5px',
       },
       fontFamily: {
         sans: [
@@ -80,13 +99,26 @@ export default {
         ],
       },
       boxShadow: {
-        soft: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        xs: '0 1px 2px 0 rgb(15 23 42 / 0.04)',
+        soft: 'var(--shadow)',
         card: '0 1px 3px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.07)',
-        lift: '0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06)',
+        lift: 'var(--shadow-lg)',
+        focus: 'var(--shadow-focus)',
         dropdown: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
       },
       borderRadius: {
+        card: 'var(--radius-card)',
+        panel: 'var(--radius-panel)',
         '4xl': '1.75rem',
+      },
+      backdropBlur: {
+        xs: '2px',
+      },
+      transitionDuration: {
+        250: '250ms',
+      },
+      transitionTimingFunction: {
+        standard: 'var(--ease-standard)',
       },
       keyframes: {
         'fade-in': {

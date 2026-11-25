@@ -16,6 +16,7 @@ import {
   logoutUser,
   registerUser,
 } from '@/services/auth'
+import { clearApiCache } from '@/hooks/useApiQuery'
 
 interface AuthContextValue {
   user: User | null
@@ -84,9 +85,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void initialize()
 
     const handleUnauthorized = () => {
-      setUser(null)
-      setToken(null)
-    }
+    clearApiCache()
+    setUser(null)
+    setToken(null)
+  }
 
     const handleAuthChanged = () => {
       setToken(getStoredToken())
@@ -105,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (credentials: { email: string; password: string }) => {
+      clearApiCache()
       const loggedUser = await loginUser(credentials)
       setUser(loggedUser)
       setToken(getStoredToken())
@@ -115,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (payload: { email: string; password: string; full_name?: string }) => {
+      clearApiCache()
       const registeredUser = await registerUser(payload)
       setUser(registeredUser)
       setToken(getStoredToken())
@@ -125,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     logoutUser()
+    clearApiCache()
     setUser(null)
     setToken(null)
   }, [])

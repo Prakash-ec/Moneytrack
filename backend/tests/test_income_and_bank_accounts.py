@@ -324,3 +324,46 @@ def test_bank_account_frontend_compatibility_and_expense_linking(client: TestCli
     # 100000 - 25000 = 75000
     assert acc_check.json()["current_balance_paise"] == 75000
 
+
+def test_income_idempotency_key_handles_replay_and_integrity_error(client: TestClient, db_session):
+    from datetime import date
+    from unittest.mock import patch
+    from sqlalchemy.exc import IntegrityError
+    from app.models.income_type import IncomeType
+    from app.models.user import User
+    from app.schemas.income import IncomeCreate
+    from app.services.incomes import create_income
+
+    user = db_session.query(User).first()
+    inc_type = IncomeType(user_id=user.id, name="Bonus", name_key="bonus", color="#16845B", icon="wallet")
+    db_session.add(inc_type)
+    db_session.commit()
+
+    payload = IncomeCreate(
+        income_type_id=inc_type.id,
+        amount_paise=125050,
+        income_date=date(2026, 11, 25),
+        payer="Employer",
+    )
+    created, replayed = create_income(db_session, payload, user_id=user.id, idempotency_key="inc-race-key")
+    assert not replayed
+    assert created.amount_paise == 125050
+
+    # Simulate concurrent commit race hitting IntegrityError
+    with patch.object(db_session, "commit", side_effect=IntegrityError("stmt", {}, Exception("unique"))):
+        # Also bypass initial scalar check so commit() is reached and IntegrityError handler executes
+        original_scalar = db_session.scalar
+        calls = {"n": 0}
+        def fake_scalar(stmt, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None
+            return original_scalar(stmt, *args, **kwargs)
+        with patch.object(db_session, "scalar", side_effect=fake_scalar):
+            replayed_inc, was_replayed = create_income(
+                db_session, payload, user_id=user.id, idempotency_key="inc-race-key"
+            )
+    assert was_replayed is True
+    assert replayed_inc.id == created.id
+
+

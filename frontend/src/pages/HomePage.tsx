@@ -1,31 +1,80 @@
 import {
+  ArrowDownLeft,
   ArrowRight,
+  ArrowUpRight,
   Building2,
+  Camera,
+  CheckCircle2,
+  ChevronRight,
+  CircleAlert,
   Plus,
   Receipt,
+  Wallet,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { CashflowHeroCard } from '@/components/CashflowHeroCard'
-import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
 import { QuickChipsModal } from '@/components/QuickChipsModal'
 import { TransactionRow } from '@/components/TransactionRow'
+import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+import { Panel, PanelHeader } from '@/components/ui/Panel'
 import { EmptyState, ErrorState, PageSkeleton } from '@/components/ui/States'
-import { ExpenseDonut } from '@/components/charts/ExpenseDonut'
 import { TrendChart } from '@/components/charts/TrendChart'
 import { useExpenseDialog } from '@/components/ExpenseDialogProvider'
 import { useApiQuery } from '@/hooks/useApiQuery'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { usePeriod } from '@/hooks/usePeriod'
 import { api } from '@/services/api'
-import { formatINR } from '@/utils/currency'
-import { formatRangeLabel, suggestedGranularity } from '@/utils/periods'
+import { cn } from '@/utils/cn'
+import { formatINR, formatSignedINR } from '@/utils/currency'
+import { formatDate } from '@/utils/dates'
+import { formatRangeLabel, rangeLength, suggestedGranularity } from '@/utils/periods'
 import { getStoredQuickChips, type QuickExpenseChip } from '@/utils/quickChips'
+
+function Metric({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = 'neutral',
+}: {
+  label: string
+  value: string
+  hint: string
+  icon: typeof ArrowDownLeft
+  tone?: 'positive' | 'danger' | 'neutral' | 'primary'
+}) {
+  const toneClass = {
+    positive: 'text-positive',
+    danger: 'text-danger',
+    neutral: 'text-text',
+    primary: 'text-primary',
+  }[tone]
+  const iconClass = {
+    positive: 'bg-positive-soft text-positive',
+    danger: 'bg-danger-soft text-danger',
+    neutral: 'bg-surface-raised text-muted',
+    primary: 'bg-primary-soft text-primary',
+  }[tone]
+
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0">
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium text-muted">{label}</p>
+        <p className={cn('mt-0.5 truncate font-mono text-[17px] font-medium tabular-nums tracking-[-0.02em]', toneClass)}>
+          {value}
+        </p>
+        <p className="mt-0.5 truncate text-[10px] text-muted">{hint}</p>
+      </div>
+      <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md', iconClass)}>
+        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      </span>
+    </div>
+  )
+}
 
 export function HomePage() {
   useDocumentTitle('Overview')
@@ -39,13 +88,9 @@ export function HomePage() {
   const [isEditChipsOpen, setIsEditChipsOpen] = useState(false)
 
   useEffect(() => {
-    const handleChipsUpdate = (e: Event) => {
-      const customEvent = e as CustomEvent<QuickExpenseChip[]>
-      if (customEvent.detail && Array.isArray(customEvent.detail)) {
-        setQuickChips(customEvent.detail)
-      } else {
-        setQuickChips(getStoredQuickChips())
-      }
+    const handleChipsUpdate = (event: Event) => {
+      const custom = event as CustomEvent<QuickExpenseChip[]>
+      setQuickChips(Array.isArray(custom.detail) ? custom.detail : getStoredQuickChips())
     }
     window.addEventListener('moneytrack:quick-chips-changed', handleChipsUpdate)
     return () => window.removeEventListener('moneytrack:quick-chips-changed', handleChipsUpdate)
@@ -64,20 +109,18 @@ export function HomePage() {
     api.analyticsTrends({ start_date: start, end_date: end, granularity }),
   )
   const recentQuery = useApiQuery(['recent-expenses', start, end], () =>
-    api.listExpenses({
-      start_date: start,
-      end_date: end,
-      sort: 'date_desc',
-      page: 1,
-      page_size: 5,
-    }),
+    api.listExpenses({ start_date: start, end_date: end, sort: 'date_desc', page: 1, page_size: 6 }),
   )
 
   const summary = summaryQuery.data
   const cashflow = cashflowQuery.data
   const loading = summaryQuery.loading && !summary
-  const error = summaryQuery.error ?? byTypeQuery.error ?? trendsQuery.error ?? recentQuery.error
-  const hasExpenses = Boolean(summary && summary.transaction_count > 0)
+  const error =
+    summaryQuery.error ??
+    cashflowQuery.error ??
+    byTypeQuery.error ??
+    trendsQuery.error ??
+    recentQuery.error
 
   const retryAll = () => {
     summaryQuery.refetch()
@@ -87,39 +130,79 @@ export function HomePage() {
     recentQuery.refetch()
   }
 
-  // Auto-refresh financial overview on background or SMS ingestion events
   useEffect(() => {
-    const handleSmsChanged = () => {
-      retryAll()
-    }
+    const handleSmsChanged = () => retryAll()
     window.addEventListener('moneytrack:sms-changed', handleSmsChanged)
     return () => window.removeEventListener('moneytrack:sms-changed', handleSmsChanged)
-  }, [summaryQuery, cashflowQuery, recentQuery, byTypeQuery, trendsQuery])
+  })
 
-  if (loading) {
-    return <PageSkeleton />
-  }
+  const derived = useMemo(() => {
+    const accounts = cashflow?.bank_accounts ?? cashflow?.accounts ?? []
+    const balance = cashflow?.consolidated_balance_paise ?? cashflow?.total_bank_balance_paise ?? 0
+    const reported = cashflow?.total_reported_balance_paise ?? null
+    const discrepancy = reported == null ? null : Math.abs(reported - balance)
+    const accountCount = accounts.length || cashflow?.account_count || 0
+    const days = Math.max(1, rangeLength(period.range))
+    const spent = summary?.total_paise ?? 0
+    const received = cashflow?.total_income_paise ?? 0
+    const net = cashflow?.net_cashflow_paise ?? received - spent
+    const transactionCount = summary?.transaction_count ?? 0
+    const dailyAverage = Math.round(spent / days)
+    const perTransaction = transactionCount > 0 ? Math.round(spent / transactionCount) : 0
+    const savingsRate =
+      received > 0
+        ? (cashflow?.savings_rate_percent ?? Math.round((net / received) * 100))
+        : null
+    const lastReportedAt = accounts.reduce<string | null>((latest, account) => {
+      if (!account.last_reported_at) return latest
+      if (!latest || account.last_reported_at > latest) return account.last_reported_at
+      return latest
+    }, null)
+    return {
+      accounts,
+      balance,
+      reported,
+      discrepancy,
+      accountCount,
+      days,
+      spent,
+      received,
+      net,
+      transactionCount,
+      dailyAverage,
+      perTransaction,
+      savingsRate,
+      lastReportedAt,
+      hasActivity: transactionCount > 0 || received > 0,
+    }
+  }, [cashflow, period.range, summary])
+
+  if (loading) return <PageSkeleton />
 
   if (error) {
     return (
-      <div className="page">
+      <div className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
         <ErrorState
           title="Could not load your overview"
-          description={typeof error === 'string' ? error : error instanceof Error ? error.message : 'Unknown error'}
+          description={error instanceof Error ? error.message : 'The overview request failed.'}
           onRetry={retryAll}
         />
       </div>
     )
   }
 
+  const comparison = summary?.comparison
+  const changePercent = comparison?.change_percent ?? null
+  const biggestExpense = summary?.highest_expense ?? null
+
   return (
-    <div className="page">
+    <div className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
       <PageHeader
         eyebrow="Overview"
-        title="Financial overview"
+        title="Your money, in one place"
         description={`${formatRangeLabel(period.range)} · Asia/Kolkata`}
         actions={
-          <div className="flex items-center gap-2">
+          <>
             <PeriodPicker
               preset={period.preset}
               range={period.range}
@@ -130,299 +213,360 @@ export function HomePage() {
               <Plus className="h-4 w-4" aria-hidden="true" />
               <span>Add expense</span>
             </Button>
-          </div>
+          </>
         }
       />
 
-      {/* Financial Overview & Quick Actions */}
-      {(() => {
-        const accountsList = cashflow?.bank_accounts ?? (cashflow as any)?.accounts ?? []
-        const totalBalance =
-          (cashflow?.consolidated_balance_paise || (cashflow as any)?.total_bank_balance_paise) ||
-          cashflow?.total_reported_balance_paise ||
-          0
-        const reportedBalance = cashflow?.total_reported_balance_paise
-        const accountsCount = accountsList.length || (cashflow as any)?.account_count || 0
-        const discrepancyPaise =
-          cashflow?.reconciliation_difference_paise ??
-          (reportedBalance != null && totalBalance != null ? Math.abs(reportedBalance - totalBalance) : 0)
-        const isReconciled = discrepancyPaise === 0
-
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5 items-stretch">
-            <div className="lg:col-span-6 flex flex-col justify-center">
-              <CashflowHeroCard
-                totalPaise={summary?.total_paise ?? 0}
-                transactionCount={summary?.transaction_count ?? 0}
-                periodLabel={formatRangeLabel(period.range)}
-                totalBankBalancePaise={totalBalance}
-                reportedBankBalancePaise={reportedBalance}
-                linkedAccountsCount={accountsCount}
-                reconciled={isReconciled}
-                discrepancyPaise={discrepancyPaise}
-                incomeTotalPaise={cashflow?.total_income_paise ?? 0}
-                onAddExpense={() => openCreate()}
-                onAddIncome={() => navigate('/transactions?tab=income')}
-                onTransfer={() => navigate('/transactions?tab=transfers')}
-                onScanReceipt={() => openScanReceipt()}
-                onManageAccounts={() => navigate('/bank-accounts')}
-              />
+      <Panel className="overflow-hidden">
+        <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1.4fr_1fr] lg:gap-8">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-soft text-primary">
+                <Wallet className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="text-xs font-medium text-muted">Total balance</span>
+              <Badge tone="neutral">
+                {derived.accountCount} account{derived.accountCount === 1 ? '' : 's'}
+              </Badge>
             </div>
 
-            <div className="lg:col-span-6 flex flex-col justify-between">
-              {/* Bank Accounts Mini Strip */}
-              {accountsList.length > 0 ? (
-                <div className="card p-5 h-full flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
-                        <span className="text-xs font-semibold text-text">
-                          Linked accounts ({accountsCount})
-                        </span>
-                      </div>
-                      <Link
-                        to="/bank-accounts"
-                        className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
-                      >
-                        <span>Manage</span>
-                        <ArrowRight className="h-3 w-3" aria-hidden="true" />
-                      </Link>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {accountsList.slice(0, 4).map((acc: any) => (
-                        <div
-                          key={acc.id}
-                          onClick={() => navigate('/bank-accounts')}
-                          className="flex items-center justify-between p-3 rounded-xl bg-surface-raised border border-border hover:border-border-strong transition-colors cursor-pointer"
-                        >
-                          <div className="min-w-0 pr-2">
-                            <div className="font-medium text-xs text-text truncate">
-                              {acc.name || acc.account_name}
-                            </div>
-                            <div className="text-[10px] text-muted flex items-center gap-1">
-                              <span>{acc.bank_name}</span>
-                              {acc.account_number_mask && (
-                                <span className="font-mono tabular-nums">· ••{acc.account_number_mask}</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="font-mono tabular-nums text-xs font-semibold text-text">
-                              {formatINR(acc.current_balance_paise || acc.last_reported_balance_paise || 0)}
-                            </div>
-                            {acc.last_reported_balance_paise != null ? (
-                              <div className="text-[10px] text-sky-400 font-mono tabular-nums">
-                                SMS: {formatINR(acc.last_reported_balance_paise)}
-                              </div>
-                            ) : (
-                              <div className="text-[10px] text-muted capitalize">
-                                {acc.account_type?.replace('_', ' ') || 'account'}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+            <p className="mt-3 break-words font-mono text-[34px] font-medium leading-none tabular-nums tracking-[-0.035em] text-text sm:text-[42px]">
+              {formatINR(derived.balance)}
+            </p>
+            <p className="mt-2 max-w-md text-xs leading-5 text-muted">
+              Opening balance plus every recorded expense, income and transfer. Negative values are
+              shown as owed, never hidden.
+            </p>
 
-              {/* Quick Record Chips Mini-Bar */}
-              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                  <span className="text-[10px] uppercase font-bold text-muted mr-1">Quick:</span>
-                  {quickChips.slice(0, 3).map((chip) => (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      onClick={() =>
-                        openCreate({
-                          amount: chip.amount,
-                          merchant: chip.merchant,
-                          note: chip.note,
-                          payment_method: chip.payment_method ? (chip.payment_method as any) : 'UPI',
-                        })
-                      }
-                      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-surface-raised hover:bg-surface border border-border text-text transition-colors shrink-0"
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsEditChipsOpen(true)}
-                  className="text-[11px] text-muted hover:text-text font-medium ml-2 shrink-0"
-                >
-                  Edit
-                </button>
-              </div>
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <Button variant="primary" size="sm" onClick={() => openCreate()}>
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                Expense
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => navigate('/transactions?tab=income')}>
+                <ArrowDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                Income
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => navigate('/transactions?tab=transfers')}>
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                Transfer
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => openScanReceipt()}>
+                <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+                Scan bill
+              </Button>
             </div>
-          ) : (
-            /* Spending Velocity & Burn Meter */
-            <div className="card p-5 h-full flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-text">
-                    Average daily spend
-                  </span>
-                  <Badge tone="neutral">Pace</Badge>
-                </div>
-                <div className="flex items-baseline justify-between mt-2">
-                  <div>
-                    <span className="text-2xl font-semibold text-text font-mono tabular-nums">
-                      {formatINR(summary?.average_paise ?? 0)}
-                    </span>
-                    <span className="text-xs text-muted ml-1.5">/ active day</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[11px] text-muted block">Period average</span>
-                    <span className="text-xs font-medium text-text font-mono tabular-nums">
-                      {summary && summary.transaction_count > 0
-                        ? formatINR(Math.round(summary.total_paise / summary.transaction_count))
-                        : '₹0'}
-                      <span className="text-[10px] text-muted ml-1">/ transaction</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                <Button variant="ghost" size="sm" onClick={() => navigate('/bank-accounts')}>
-                  <span>+ Link bank account</span>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  })()}
+          </div>
 
-      {hasExpenses ? (
-        <>
-          <section className="dashboard-grid">
-            <article className="card chart-card wide">
-              <div className="card-header">
-                <div>
-                  <h2>Spending over time</h2>
-                  <p>Daily expenses for {formatRangeLabel(period.range)}</p>
-                </div>
-                <div className="chart-total">
-                  <span>This period</span>
-                  <strong>{formatINR(summary?.total_paise ?? 0)}</strong>
-                </div>
-              </div>
-              <div className="p-4 sm:p-5">
-                <TrendChart
-                  series={trendsQuery.data?.series ?? []}
-                  granularity={granularity}
-                  variant="bar"
-                  height={250}
-                />
-              </div>
-            </article>
-
-            <article className="card breakdown-card">
-              <div className="card-header">
-                <div>
-                  <h2>By expense type</h2>
-                  <p>Categorized outflow</p>
-                </div>
-                <Link
-                  to={`/analytics?view=breakdown&${period.periodSearch}`}
-                  className="button button-ghost button-sm text-primary flex items-center gap-1"
-                >
-                  <span>View breakdown</span>
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </Link>
-              </div>
-              <div className="p-4 sm:p-5">
-                <ExpenseDonut
-                  items={byTypeQuery.data?.items ?? []}
-                  totalPaise={summary?.total_paise ?? 0}
-                  onSelect={(typeId) => navigate(`/expense-types/${typeId}`)}
-                />
-
-                {byTypeQuery.data?.items && byTypeQuery.data.items.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-border">
-                    <div className="text-[11px] font-medium text-muted mb-2.5">
-                      Top expense shares
-                    </div>
-                    <div className="space-y-2.5">
-                      {byTypeQuery.data.items.slice(0, 3).map((item) => (
-                        <div key={item.expense_type_id}>
-                          <div className="flex justify-between items-center text-xs mb-1 gap-2 min-w-0">
-                            <span className="font-medium text-text flex items-center gap-1.5 min-w-0 flex-1">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full shrink-0"
-                                style={{ backgroundColor: item.color || 'var(--primary)' }}
-                              />
-                              <span className="truncate flex-1">{item.name}</span>
-                            </span>
-                            <span className="text-muted font-mono tabular-nums text-[11px] shrink-0">
-                              {formatINR(item.total_paise)} ({item.share_percent.toFixed(0)}%)
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-full bg-border/60 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-300"
-                              style={{
-                                width: `${Math.min(100, Math.max(5, item.share_percent))}%`,
-                                backgroundColor: item.color || 'var(--primary)',
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </article>
-          </section>
-
-          <section className="card transaction-card mt-5">
-            <div className="card-header">
-              <div>
-                <h2>Recent transactions</h2>
-                <p>Latest recorded activity</p>
-              </div>
+          <div className="rounded-xl border border-border bg-surface-raised">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <span className="text-[11px] font-semibold text-text">This period</span>
               <Link
                 to={`/transactions?${period.periodSearch}`}
-                className="button button-ghost button-sm text-primary flex items-center gap-1"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary"
               >
-                <span>View all</span>
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                Ledger
+                <ChevronRight className="h-3 w-3" aria-hidden="true" />
               </Link>
             </div>
+            <Metric
+              label="Received"
+              value={formatINR(derived.received)}
+              hint={`${derived.days} day${derived.days === 1 ? '' : 's'} in view`}
+              icon={ArrowDownLeft}
+              tone="positive"
+            />
+            <Metric
+              label="Spent"
+              value={formatINR(derived.spent)}
+              hint={`${derived.transactionCount} transaction${derived.transactionCount === 1 ? '' : 's'}`}
+              icon={ArrowUpRight}
+              tone="danger"
+            />
+            <Metric
+              label="Net flow"
+              value={formatSignedINR(derived.net)}
+              hint={
+                derived.savingsRate == null
+                  ? 'No income recorded this period'
+                  : `${derived.savingsRate.toFixed(0)}% of income kept`
+              }
+              icon={Wallet}
+              tone={derived.net >= 0 ? 'positive' : 'danger'}
+            />
+          </div>
+        </div>
 
-            <div>
-              {recentQuery.data?.items?.map((expense) => (
-                <TransactionRow
-                  key={expense.id}
-                  expense={expense}
-                  onEdit={openEdit}
-                />
-              ))}
+        <div className="flex flex-col gap-2 border-t border-border bg-surface-raised px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 text-[11px]">
+            {derived.reported == null ? (
+              <>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning">
+                  <CircleAlert className="h-3 w-3" aria-hidden="true" />
+                </span>
+                <span className="text-muted">
+                  {derived.accountCount === 0
+                    ? 'No bank account linked yet. Reconciliation starts after you link one.'
+                    : 'No bank-reported balance yet. This calculated balance has not been verified against a bank SMS.'}
+                </span>
+              </>
+            ) : derived.discrepancy === 0 ? (
+              <>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-positive-soft text-positive">
+                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                </span>
+                <span className="text-muted">
+                  Reconciled with your last bank-reported balance
+                  {derived.lastReportedAt ? ` on ${formatDate(derived.lastReportedAt.slice(0, 10))}` : ''}.
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning">
+                  <CircleAlert className="h-3 w-3" aria-hidden="true" />
+                </span>
+                <span className="text-muted">
+                  {formatINR(derived.discrepancy ?? 0)} difference from the last bank-reported
+                  balance. Review the account before treating it as reconciled.
+                </span>
+              </>
+            )}
+          </div>
+          <Link
+            to={derived.accountCount === 0 ? '/bank-accounts?new=1' : '/bank-accounts'}
+            className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-primary"
+          >
+            {derived.accountCount === 0 ? 'Link an account' : 'Manage accounts'}
+            <ArrowRight className="h-3 w-3" aria-hidden="true" />
+          </Link>
+        </div>
+      </Panel>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <Panel className="p-4">
+          <p className="text-[11px] font-medium text-muted">Spent this period</p>
+          <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+            {formatINR(derived.spent)}
+          </p>
+          <p className="mt-1 text-[11px] text-muted">
+            {changePercent == null ? (
+              'No previous period to compare'
+            ) : (
+              <span className={changePercent > 0 ? 'text-danger' : changePercent < 0 ? 'text-positive' : ''}>
+                {changePercent > 0 ? '+' : ''}
+                {changePercent.toFixed(1)}% vs previous period
+              </span>
+            )}
+          </p>
+        </Panel>
+
+        <Panel className="p-4">
+          <p className="text-[11px] font-medium text-muted">Average spend</p>
+          <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+            {formatINR(derived.dailyAverage)}
+            <span className="ml-1 font-sans text-[11px] font-normal text-muted">/ day</span>
+          </p>
+          <p className="mt-1 text-[11px] text-muted">
+            {formatINR(derived.perTransaction)} per transaction · {derived.days} day
+            {derived.days === 1 ? '' : 's'}
+          </p>
+        </Panel>
+
+        <Panel className="p-4">
+          <p className="text-[11px] font-medium text-muted">Largest expense</p>
+          <p className="mt-1.5 truncate font-mono text-[22px] font-medium tabular-nums tracking-[-0.02em] text-text">
+            {formatINR(biggestExpense?.amount_paise ?? 0)}
+          </p>
+          <p className="mt-1 truncate text-[11px] text-muted">
+            {biggestExpense
+              ? `${biggestExpense.expense_type?.name ?? 'Expense'} · ${formatDate(biggestExpense.expense_date)}`
+              : 'Nothing recorded this period'}
+          </p>
+        </Panel>
+      </div>
+
+      {derived.hasActivity ? (
+        <div className="mt-4 grid gap-4 lg:grid-cols-12">
+          <Panel className="min-w-0 lg:col-span-8">
+            <PanelHeader
+              title="Spending over time"
+              description={`${formatRangeLabel(period.range)} · ${granularity} buckets`}
+              action={
+                <Link
+                  to={`/analytics?${period.periodSearch}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-primary"
+                >
+                  Analytics
+                  <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                </Link>
+              }
+            />
+            <div className="px-3 py-4 sm:px-5">
+              <TrendChart
+                series={trendsQuery.data?.series ?? []}
+                granularity={granularity}
+                variant="bar"
+                height={260}
+              />
             </div>
-          </section>
-        </>
+          </Panel>
+
+          <Panel className="min-w-0 lg:col-span-4">
+            <PanelHeader
+              title="Where it went"
+              description="Share of period spend"
+              action={
+                <Link
+                  to={`/analytics?view=breakdown&${period.periodSearch}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-primary"
+                >
+                  All
+                  <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                </Link>
+              }
+            />
+            <div className="p-5">
+              {byTypeQuery.data?.items?.length ? (
+                <ol className="space-y-4">
+                  {byTypeQuery.data.items.slice(0, 5).map((item) => (
+                    <li key={item.expense_type_id}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <Link
+                          to={`/expense-types/${item.expense_type_id}`}
+                          className="min-w-0 truncate text-xs font-medium text-text hover:text-primary"
+                        >
+                          {item.name}
+                        </Link>
+                        <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
+                          {item.share_percent.toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-raised">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{ width: `${Math.max(2, Math.min(100, item.share_percent))}%` }}
+                          />
+                        </div>
+                        <span className="w-[86px] shrink-0 text-right font-mono text-[10px] tabular-nums text-muted">
+                          {formatINR(item.total_paise)}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="py-8 text-center text-xs text-muted">No categorised spend yet.</p>
+              )}
+            </div>
+          </Panel>
+        </div>
       ) : (
-        <Card className="p-8 text-center mt-5">
+        <Panel className="mt-4">
           <EmptyState
             icon={Receipt}
-            title="No expenses for this period"
-            description="You don't have any expenditure recorded for this time range. Add your first expense or adjust the reporting period above."
+            title="A clean slate"
+            description="Record your first expense, income or account balance. Every figure stays exact, in paise, and under your account only."
             action={
-              <Button variant="primary" onClick={() => openCreate()}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                <span>Add first expense</span>
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="primary" onClick={() => openCreate()}>
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Add expense
+                </Button>
+                <Button variant="secondary" onClick={() => navigate('/transactions?tab=income')}>
+                  <ArrowDownLeft className="h-4 w-4" aria-hidden="true" />
+                  Record income
+                </Button>
+                <Button variant="ghost" onClick={() => navigate('/bank-accounts')}>
+                  <Building2 className="h-4 w-4" aria-hidden="true" />
+                  Link account
+                </Button>
+              </div>
             }
           />
-        </Card>
+        </Panel>
       )}
 
-      {/* Quick Log Customization Modal */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-12">
+        <Panel className="min-w-0 lg:col-span-8">
+          <PanelHeader
+            title="Recent expenses"
+            description="Latest recorded outflow"
+            action={
+              <Link
+                to={`/transactions?${period.periodSearch}`}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary"
+              >
+                View all
+                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            }
+          />
+          {recentQuery.data?.items?.length ? (
+            <div>
+              {recentQuery.data.items.map((expense) => (
+                <TransactionRow key={expense.id} expense={expense} onEdit={openEdit} />
+              ))}
+            </div>
+          ) : (
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm font-medium text-text">No expenses in this period</p>
+              <p className="mt-1 text-xs text-muted">
+                Change the period above, or record a new expense.
+              </p>
+            </div>
+          )}
+        </Panel>
+
+        <Panel className="min-w-0 lg:col-span-4">
+          <PanelHeader
+            title="Quick add"
+            description="One tap, then confirm"
+            action={
+              <button
+                type="button"
+                onClick={() => setIsEditChipsOpen(true)}
+                className="text-[11px] font-medium text-muted hover:text-text"
+              >
+                Edit
+              </button>
+            }
+          />
+          <div className="space-y-2 p-5">
+            {quickChips.slice(0, 4).map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={() =>
+                  openCreate({
+                    amount: chip.amount,
+                    merchant: chip.merchant,
+                    note: chip.note,
+                    payment_method: chip.payment_method,
+                  })
+                }
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary-border hover:bg-primary-soft"
+              >
+                <span className="min-w-0 truncate text-xs font-medium text-text">
+                  {chip.label.replace(/^[^\p{L}\p{N}]+/u, '')}
+                </span>
+                <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
+                  {formatINR(
+                    Number.isFinite(Number(chip.amount))
+                      ? Math.round(Number(chip.amount) * 100)
+                      : 0,
+                  )}
+                </span>
+              </button>
+            ))}
+            <p className="pt-1 text-[10px] leading-4 text-muted">
+              Quick add opens the expense form with the amount filled in. Nothing posts until you
+              confirm.
+            </p>
+          </div>
+        </Panel>
+      </div>
+
       <QuickChipsModal
         open={isEditChipsOpen}
         onClose={() => setIsEditChipsOpen(false)}

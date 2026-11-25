@@ -2,6 +2,7 @@ import math
 from datetime import UTC, date, datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.bank_account import BankAccount

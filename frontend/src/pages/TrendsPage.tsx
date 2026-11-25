@@ -1,25 +1,24 @@
 import {
-  ArrowUpRight,
   BarChart3,
-  Calendar,
+  CalendarDays,
   Clock,
   Layers,
   LineChart,
   PieChart,
   Plus,
-  Sparkles,
   TrendingDown,
   TrendingUp,
   Wallet,
-  Zap,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
+import { AppPage } from '@/components/AppPage'
 import { PageHeader } from '@/components/PageHeader'
 import { PeriodPicker } from '@/components/PeriodPicker'
 import { Badge } from '@/components/ui/Badge'
-import { Card } from '@/components/ui/Card'
-import { ErrorState, PageSkeleton } from '@/components/ui/States'
+import { Button } from '@/components/ui/Button'
+import { Panel, PanelHeader } from '@/components/ui/Panel'
+import { EmptyState, ErrorState, PageSkeleton } from '@/components/ui/States'
 import { TrendChart } from '@/components/charts/TrendChart'
 import { useExpenseDialog } from '@/components/ExpenseDialogProvider'
 import { useApiQuery } from '@/hooks/useApiQuery'
@@ -27,12 +26,50 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { usePeriod } from '@/hooks/usePeriod'
 import { api } from '@/services/api'
 import type { Granularity } from '@/types/api'
+import { cn } from '@/utils/cn'
 import { formatINR, formatPercent } from '@/utils/currency'
 import { formatDate } from '@/utils/dates'
 import { formatRangeLabel, suggestedGranularity, type PeriodPreset } from '@/utils/periods'
-import { cn } from '@/utils/cn'
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+const QUICK_PRESETS: Array<{ label: string; preset: PeriodPreset }> = [
+  { label: 'This month', preset: 'month' },
+  { label: 'Last 30 days', preset: 'last_30' },
+  { label: 'This year', preset: 'year' },
+]
+
+function Metric({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = 'default',
+}: {
+  label: string
+  value: string
+  hint: string
+  icon: typeof Wallet
+  tone?: 'default' | 'positive' | 'danger'
+}) {
+  return (
+    <Panel className="p-4">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-medium text-muted">{label}</p>
+        <Icon className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+      </div>
+      <p
+        className={cn(
+          'mt-1.5 truncate font-mono text-[20px] font-medium tabular-nums tracking-[-0.02em]',
+          tone === 'positive' ? 'text-positive' : tone === 'danger' ? 'text-danger' : 'text-text',
+        )}
+      >
+        {value}
+      </p>
+      <p className="mt-1 truncate text-[11px] text-muted">{hint}</p>
+    </Panel>
+  )
+}
 
 export function TrendsPage({ embedded = false }: { embedded?: boolean } = {}) {
   useDocumentTitle('Spending Trends')
@@ -63,19 +100,18 @@ export function TrendsPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   const series = trends?.series ?? []
   const totalPeriodSpend = useMemo(
-    () => series.reduce((sum, p) => sum + (p.total_paise || 0), 0),
+    () => series.reduce((sum, point) => sum + (point.total_paise || 0), 0),
     [series],
   )
   const totalTxCount = useMemo(
-    () => series.reduce((sum, p) => sum + (p.transaction_count || 0), 0),
+    () => series.reduce((sum, point) => sum + (point.transaction_count || 0), 0),
     [series],
   )
-  const activeDaysCount = useMemo(
-    () => series.filter((p) => (p.total_paise || 0) > 0).length,
+  const activePeriodCount = useMemo(
+    () => series.filter((point) => (point.total_paise || 0) > 0).length,
     [series],
   )
 
-  // Resilient check: True if ANY series point has spend OR comparison count > 0 OR largest_days has entries
   const hasExpenses =
     totalPeriodSpend > 0 ||
     totalTxCount > 0 ||
@@ -85,51 +121,41 @@ export function TrendsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const largestDay = trends?.largest_days?.[0]
   const topType = trends?.rankings?.[0]
 
-  const averagePerActiveDay =
-    activeDaysCount > 0 ? Math.round(totalPeriodSpend / activeDaysCount) : 0
-  const dailyAverageAllDays =
-    series.length > 0 ? Math.round(totalPeriodSpend / series.length) : 0
+  const averagePerActivePeriod =
+    activePeriodCount > 0 ? Math.round(totalPeriodSpend / activePeriodCount) : 0
+  const averagePerBucket = series.length > 0 ? Math.round(totalPeriodSpend / series.length) : 0
 
-  // Day of week analysis (Mon - Sun)
   const dayOfWeekStats = useMemo(() => {
     if (!series.length) return []
-    const totals = [0, 0, 0, 0, 0, 0, 0] // 0=Sun, 1=Mon, ..., 6=Sat
+    const totals = [0, 0, 0, 0, 0, 0, 0]
     const counts = [0, 0, 0, 0, 0, 0, 0]
 
-    for (const p of series) {
-      if (!p.total_paise) continue
-      const d = new Date(p.date)
-      const day = d.getDay()
-      totals[day] += p.total_paise
-      counts[day] += p.transaction_count
+    for (const point of series) {
+      if (!point.total_paise) continue
+      const day = new Date(point.date).getDay()
+      totals[day] += point.total_paise
+      counts[day] += point.transaction_count
     }
 
     const maxSpend = Math.max(...totals, 1)
-
-    // Reorder from Monday (1) to Sunday (0)
     const order = [1, 2, 3, 4, 5, 6, 0]
-    return order.map((dayIdx) => ({
-      name: DAY_NAMES[dayIdx],
-      total: totals[dayIdx],
-      count: counts[dayIdx],
-      pctOfMax: (totals[dayIdx] / maxSpend) * 100,
+    return order.map((dayIndex) => ({
+      name: DAY_NAMES[dayIndex],
+      total: totals[dayIndex],
+      count: counts[dayIndex],
+      pctOfMax: (totals[dayIndex] / maxSpend) * 100,
     }))
   }, [series])
 
-  // Weekday vs Weekend dynamics
   const dynamics = useMemo(() => {
     if (!series.length || totalPeriodSpend === 0) return null
     let weekdayPaise = 0
     let weekendPaise = 0
 
     for (const point of series) {
-      const d = new Date(point.date)
-      const day = d.getDay()
-      if (day === 0 || day === 6) {
-        weekendPaise += point.total_paise || 0
-      } else {
-        weekdayPaise += point.total_paise || 0
-      }
+      const day = new Date(point.date).getDay()
+      if (day === 0 || day === 6) weekendPaise += point.total_paise || 0
+      else weekdayPaise += point.total_paise || 0
     }
 
     const total = weekdayPaise + weekendPaise
@@ -141,441 +167,340 @@ export function TrendsPage({ embedded = false }: { embedded?: boolean } = {}) {
     }
   }, [series, totalPeriodSpend])
 
-  const quickPresets: Array<{ label: string; preset: PeriodPreset }> = [
-    { label: 'This Month', preset: 'month' },
-    { label: 'Last 30 Days', preset: 'last_30' },
-    { label: 'This Year', preset: 'year' },
-  ]
+  const content = (() => {
+    if (loading) return <PageSkeleton />
 
-  if (loading) {
-    return <PageSkeleton />
-  }
-
-  if (error) {
-    return (
-      <div className="page">
+    if (error) {
+      return (
         <ErrorState
-          title="Could not load spending trends"
-          description={
-            typeof error === 'string'
-              ? error
-              : error instanceof Error
-                ? error.message
-                : 'Unable to communicate with the analytics engine.'
-          }
+          title="Could not load trends"
+          description={error instanceof Error ? error.message : 'The trends request failed.'}
           onRetry={() => {
             trendsQuery.refetch()
             comparisonQuery.refetch()
           }}
         />
-      </div>
-    )
-  }
+      )
+    }
 
-  return (
-    <div className={embedded ? '' : 'page pb-20'}>
-      {!embedded && (
-        <PageHeader
-          eyebrow="Trends & velocity"
-          title="Spending trends"
-          description="Monitor temporal trajectories, spending velocity, and habit cycles."
-          actions={
-            <div className="flex items-center gap-2 flex-wrap">
+    return (
+      <>
+        {!embedded ? (
+          <PageHeader
+            eyebrow="Analytics"
+            title="Spending trends"
+            description={`${formatRangeLabel(period.range)} · How outflow moves over time`}
+            actions={
               <PeriodPicker
                 preset={period.preset}
                 range={period.range}
                 onPresetChange={period.setPreset}
                 onCustomChange={period.setCustomRange}
               />
-            </div>
-          }
-        />
-      )}
+            }
+          />
+        ) : null}
 
-      {/* Quick Period Horizon Selector */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-4 no-scrollbar">
-        <span className="text-[11px] font-bold text-muted uppercase tracking-wider whitespace-nowrap mr-1">
-          Quick Range:
-        </span>
-        {quickPresets.map((qp) => (
-          <button
-            key={qp.preset}
-            type="button"
-            onClick={() => period.setPreset(qp.preset)}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border',
-              period.preset === qp.preset
-                ? 'bg-primary text-white border-primary shadow-sm shadow-primary/30'
-                : 'bg-surface hover:bg-surface-raised text-muted hover:text-text border-border',
-            )}
-          >
-            {qp.label}
-          </button>
-        ))}
-      </div>
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] text-muted">Range</span>
+          {QUICK_PRESETS.map((preset) => (
+            <button
+              key={preset.preset}
+              type="button"
+              onClick={() => period.setPreset(preset.preset)}
+              aria-pressed={period.preset === preset.preset}
+              className={cn(
+                'h-8 rounded-full border px-3 text-[11px] font-medium transition-colors',
+                period.preset === preset.preset
+                  ? 'border-primary-border bg-primary-soft text-primary'
+                  : 'border-border bg-surface text-muted hover:text-text',
+              )}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
 
-      {hasExpenses ? (
-        <>
-          {/* Key Trend KPI Metric Cards */}
-          <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
-            <div className="stat-card">
-              <div className="stat-label">
-                <span>Period Outflow</span>
-                <span className="stat-icon">
-                  <Wallet className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </div>
-              <strong className="stat-value">{formatINR(totalPeriodSpend)}</strong>
-              <div className="stat-detail">
-                {comparison?.change_percent != null ? (
-                  <span
-                    className={cn(
-                      'inline-flex items-center gap-1 font-semibold text-xs',
-                      comparison.direction === 'down' ? 'text-positive' : 'text-danger',
-                    )}
-                  >
-                    {comparison.direction === 'down' ? (
-                      <TrendingDown className="h-3.5 w-3.5" />
-                    ) : (
-                      <TrendingUp className="h-3.5 w-3.5" />
-                    )}
-                    {Math.abs(comparison.change_percent).toFixed(1)}% vs prev
-                  </span>
-                ) : (
-                  <span>{totalTxCount} transactions</span>
-                )}
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-label">
-                <span>Active Day Avg</span>
-                <span className="stat-icon">
-                  <Zap className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </div>
-              <strong className="stat-value">{formatINR(averagePerActiveDay)}</strong>
-              <div className="stat-detail">
-                <span>Across {activeDaysCount} active days</span>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-label">
-                <span>Peak Single Day</span>
-                <span className="stat-icon">
-                  <Calendar className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </div>
-              <strong className="stat-value">
-                {largestDay ? formatINR(largestDay.total_paise) : '₹0.00'}
-              </strong>
-              <div className="stat-detail truncate">
-                <span>{largestDay ? formatDate(largestDay.date) : 'No spikes detected'}</span>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-label">
-                <span>Timeline Span</span>
-                <span className="stat-icon">
-                  <Clock className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </div>
-              <strong className="stat-value font-display">{series.length} Days</strong>
-              <div className="stat-detail">
-                <span>Avg {formatINR(dailyAverageAllDays)} / day</span>
-              </div>
-            </div>
-          </section>
-
-          {/* Main Interactive Chart Section */}
-          <section className="card p-4 sm:p-6 mb-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-border">
-              <div>
-                <h2 className="text-base font-bold text-text font-display flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-                  Spending Trajectory
-                </h2>
-                <p className="text-xs text-muted mt-0.5">{formatRangeLabel(period.range)}</p>
-              </div>
-
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                {/* Chart Type Toggle: Area vs Bar */}
-                <div className="segmented">
-                  <button
-                    type="button"
-                    onClick={() => setChartVariant('area')}
-                    className={cn(chartVariant === 'area' && 'active')}
-                    title="Area Curve"
-                    aria-label="Area Curve"
-                  >
-                    <LineChart className="h-3.5 w-3.5 inline mr-1" />
-                    Area
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartVariant('bar')}
-                    className={cn(chartVariant === 'bar' && 'active')}
-                    title="Bar Histogram"
-                    aria-label="Bar Histogram"
-                  >
-                    <BarChart3 className="h-3.5 w-3.5 inline mr-1" />
-                    Bars
-                  </button>
-                </div>
-
-                {/* Granularity Toggle: Daily / Weekly / Monthly */}
-                <div className="segmented">
-                  <button
-                    type="button"
-                    onClick={() => setGranularity('daily')}
-                    className={cn(granularity === 'daily' && 'active')}
-                  >
-                    Daily
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGranularity('weekly')}
-                    className={cn(granularity === 'weekly' && 'active')}
-                  >
-                    Weekly
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGranularity('monthly')}
-                    className={cn(granularity === 'monthly' && 'active')}
-                  >
-                    Monthly
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="w-full">
-              <TrendChart
-                series={series}
-                granularity={granularity}
-                variant={chartVariant}
-                height={290}
+        {hasExpenses ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Metric
+                label="Period outflow"
+                value={formatINR(totalPeriodSpend)}
+                hint={
+                  comparison?.change_percent != null
+                    ? `${comparison.direction === 'down' ? '−' : '+'}${formatPercent(
+                        Math.abs(comparison.change_percent),
+                      )}% vs previous period`
+                    : `${totalTxCount} transactions`
+                }
+                icon={Wallet}
+                tone={
+                  comparison?.change_percent != null
+                    ? comparison.direction === 'down'
+                      ? 'positive'
+                      : 'danger'
+                    : 'default'
+                }
+              />
+              <Metric
+                label="Average per active period"
+                value={formatINR(averagePerActivePeriod)}
+                hint={`${activePeriodCount} ${granularity} bucket${activePeriodCount === 1 ? '' : 's'} with spend`}
+                icon={Clock}
+              />
+              <Metric
+                label="Peak day"
+                value={largestDay ? formatINR(largestDay.total_paise) : '—'}
+                hint={largestDay ? formatDate(largestDay.date) : 'No single-day spike'}
+                icon={CalendarDays}
+              />
+              <Metric
+                label="Data points"
+                value={String(series.length)}
+                hint={`${granularity} buckets · avg ${formatINR(averagePerBucket)}`}
+                icon={Layers}
               />
             </div>
-          </section>
 
-          {/* Day-of-Week Distribution & Habit Cycle */}
-          <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-            <div className="card p-4 sm:p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-sm font-bold text-text font-display flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-                    Day of Week Spending Heatmap
-                  </h3>
-                  <p className="text-xs text-muted mt-0.5">Which days of the week see the heaviest outflow</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-7 gap-1.5 sm:gap-2 pt-2">
-                {dayOfWeekStats.map((item) => (
-                  <div key={item.name} className="flex flex-col items-center gap-1.5 text-center">
-                    <div className="h-28 w-full bg-surface-raised rounded-lg flex flex-col justify-end p-1 border border-border">
-                      <div
-                        className={cn(
-                          'w-full rounded-md transition-all',
-                          item.pctOfMax > 70
-                            ? 'bg-primary'
-                            : item.pctOfMax > 30
-                              ? 'bg-primary/70'
-                              : 'bg-primary/40',
-                        )}
-                        style={{ height: `${Math.max(6, item.pctOfMax)}%` }}
-                        title={`${item.name}: ${formatINR(item.total)} (${item.count} tx)`}
-                      />
+            <Panel className="mt-3">
+              <PanelHeader
+                title="Outflow over time"
+                description={formatRangeLabel(period.range)}
+                action={
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <div
+                      className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
+                      role="group"
+                      aria-label="Chart style"
+                    >
+                      {(
+                        [
+                          ['area', 'Area', LineChart],
+                          ['bar', 'Bars', BarChart3],
+                        ] as const
+                      ).map(([value, label, Icon]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setChartVariant(value)}
+                          aria-pressed={chartVariant === value}
+                          className={cn(
+                            'inline-flex h-7 items-center gap-1 rounded px-2 text-[10px] font-medium transition-colors',
+                            chartVariant === value
+                              ? 'bg-surface-raised text-text'
+                              : 'text-muted hover:text-text',
+                          )}
+                        >
+                          <Icon className="h-3 w-3" aria-hidden="true" />
+                          {label}
+                        </button>
+                      ))}
                     </div>
-                    <span className="text-[11px] font-bold text-text">{item.name}</span>
-                    <span className="text-[10px] text-muted font-medium tabular">
-                      {item.total > 0 ? `₹${Math.round(item.total / 100)}` : '₹0'}
-                    </span>
+
+                    <div
+                      className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
+                      role="group"
+                      aria-label="Bucket size"
+                    >
+                      {(['daily', 'weekly', 'monthly'] as const).map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setGranularity(value)}
+                          aria-pressed={granularity === value}
+                          className={cn(
+                            'inline-flex h-7 items-center rounded px-2 text-[10px] font-medium capitalize transition-colors',
+                            granularity === value
+                              ? 'bg-surface-raised text-text'
+                              : 'text-muted hover:text-text',
+                          )}
+                        >
+                          {value}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                ))}
+                }
+              />
+              <div className="px-2 py-4 sm:px-4">
+                <TrendChart
+                  series={series}
+                  granularity={granularity}
+                  variant={chartVariant}
+                  height={290}
+                />
               </div>
+            </Panel>
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <Panel>
+                <PanelHeader
+                  title="Day of week"
+                  description="Outflow grouped by weekday across the range"
+                />
+                <div className="p-4 sm:p-5">
+                  <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                    {dayOfWeekStats.map((item) => (
+                      <div key={item.name} className="flex flex-col items-center gap-1.5 text-center">
+                        <div className="flex h-28 w-full flex-col justify-end rounded-md border border-border bg-surface-raised p-1">
+                          <div
+                            className="w-full rounded-sm bg-primary transition-all"
+                            style={{
+                              height: `${Math.max(4, item.pctOfMax)}%`,
+                              opacity: 0.35 + (item.pctOfMax / 100) * 0.65,
+                            }}
+                            title={`${item.name}: ${formatINR(item.total)} (${item.count} transactions)`}
+                          />
+                        </div>
+                        <span className="text-[10px] font-medium text-text">{item.name}</span>
+                        <span className="font-mono text-[9px] tabular-nums text-muted">
+                          {item.total > 0 ? `₹${Math.round(item.total / 100)}` : '₹0'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Panel>
+
+              {dynamics ? (
+                <Panel>
+                  <PanelHeader
+                    title="Weekday vs weekend"
+                    description="How much of the outflow lands on workdays"
+                    action={
+                      <Badge
+                        tone={dynamics.weekdayPct >= dynamics.weekendPct ? 'primary' : 'warning'}
+                      >
+                        {dynamics.weekdayPct >= dynamics.weekendPct ? 'Mostly weekdays' : 'Mostly weekends'}
+                      </Badge>
+                    }
+                  />
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                    <div className="rounded-lg border border-border bg-surface-raised p-3.5">
+                      <p className="text-[11px] font-medium text-muted">Weekdays (Mon–Fri)</p>
+                      <p className="mt-1 font-mono text-[18px] font-medium tabular-nums text-text">
+                        {formatINR(dynamics.weekdayPaise)}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted">
+                        {dynamics.weekdayPct.toFixed(0)}% of period spend
+                      </p>
+                      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-border">
+                        <div
+                          className="h-full rounded-full bg-primary"
+                          style={{ width: `${dynamics.weekdayPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-surface-raised p-3.5">
+                      <p className="text-[11px] font-medium text-muted">Weekends (Sat–Sun)</p>
+                      <p className="mt-1 font-mono text-[18px] font-medium tabular-nums text-text">
+                        {formatINR(dynamics.weekendPaise)}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted">
+                        {dynamics.weekendPct.toFixed(0)}% of period spend
+                      </p>
+                      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-border">
+                        <div
+                          className="h-full rounded-full bg-warning"
+                          style={{ width: `${dynamics.weekendPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </Panel>
+              ) : null}
             </div>
 
-            {/* Weekday vs Weekend Dynamics */}
-            {dynamics && (
-              <div className="card p-4 sm:p-5 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-bold text-text font-display flex items-center gap-2">
-                      <Layers className="h-4 w-4 text-primary" aria-hidden="true" />
-                      Weekday vs Weekend Dynamics
-                    </h3>
-                    <Badge tone={dynamics.weekdayPct >= dynamics.weekendPct ? 'primary' : 'warning'}>
-                      {dynamics.weekdayPct >= dynamics.weekendPct
-                        ? 'Weekday Dominant'
-                        : 'Weekend Dominant'}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted">
-                    Compare lifestyle spending on workdays versus leisure weekends.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                  <div className="p-3.5 rounded-xl bg-surface-raised border border-border">
-                    <span className="text-[11px] font-semibold text-muted uppercase tracking-wider">
-                      Weekdays (Mon–Fri)
-                    </span>
-                    <div className="text-lg font-bold text-text font-display mt-1">
-                      {formatINR(dynamics.weekdayPaise)}
-                    </div>
-                    <span className="text-xs text-muted mt-0.5 block">
-                      {dynamics.weekdayPct.toFixed(0)}% of total spend
-                    </span>
-                    <div className="h-2 w-full bg-border rounded-full mt-2.5 overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all"
-                        style={{ width: `${dynamics.weekdayPct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-surface-raised border border-border">
-                    <span className="text-[11px] font-semibold text-muted uppercase tracking-wider">
-                      Weekends (Sat–Sun)
-                    </span>
-                    <div className="text-lg font-bold text-text font-display mt-1">
-                      {formatINR(dynamics.weekendPaise)}
-                    </div>
-                    <span className="text-xs text-muted mt-0.5 block">
-                      {dynamics.weekendPct.toFixed(0)}% of total spend
-                    </span>
-                    <div className="h-2 w-full bg-border rounded-full mt-2.5 overflow-hidden">
-                      <div
-                        className="h-full bg-amber-500 rounded-full transition-all"
-                        style={{ width: `${dynamics.weekendPct}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 text-[11px] text-muted italic">
-                  Tip: Shift planned major retail expenditures to weekdays for disciplined budgeting.
-                </div>
-              </div>
-            )}
-          </section>
-
-          {/* Strategic Insights & Spike Events */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-            <article className="stat-card">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="stat-icon">
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <Panel className="p-4">
+                <div className="flex items-center gap-2">
                   {comparison?.direction === 'down' ? (
-                    <TrendingDown className="h-4 w-4 text-positive" />
+                    <TrendingDown className="h-3.5 w-3.5 text-positive" aria-hidden="true" />
                   ) : (
-                    <TrendingUp className="h-4 w-4 text-primary" />
+                    <TrendingUp className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
                   )}
-                </span>
-                <span className="text-xs font-bold text-text uppercase tracking-wider">
-                  Period Comparison
-                </span>
-              </div>
-              <strong className="text-sm font-bold text-text block mb-1">
-                {comparison?.change_percent != null
-                  ? `Spending is ${comparison.direction === 'down' ? 'down' : 'up'} by ${formatPercent(Math.abs(comparison.change_percent))}%`
-                  : comparison?.direction === 'new'
-                    ? 'Baseline Period'
-                    : 'Spending is stable'}
-              </strong>
-              <p className="text-xs text-muted">
-                {comparison?.change_paise != null
-                  ? `${formatINR(Math.abs(comparison.change_paise))} ${comparison.direction === 'down' ? 'saved' : 'increase'} compared to preceding range.`
-                  : 'Track ongoing expenditures to generate automatic baseline comparisons.'}
-              </p>
-            </article>
+                  <p className="text-[11px] font-medium text-muted">Compared with previous period</p>
+                </div>
+                <p className="mt-2 text-[13px] font-medium text-text">
+                  {comparison?.change_percent != null
+                    ? `Spending ${comparison.direction === 'down' ? 'fell' : 'rose'} ${formatPercent(
+                        Math.abs(comparison.change_percent),
+                      )}%`
+                    : comparison?.direction === 'new'
+                      ? 'No earlier period to compare'
+                      : 'Spending is broadly unchanged'}
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-muted">
+                  {comparison?.change_paise != null
+                    ? `${formatINR(Math.abs(comparison.change_paise))} ${
+                        comparison.direction === 'down' ? 'less' : 'more'
+                      } than the preceding range.`
+                    : 'A comparison appears once an earlier range has recorded spend.'}
+                </p>
+              </Panel>
 
-            <article className="stat-card">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="stat-icon">
-                  <Calendar className="h-4 w-4 text-primary" />
-                </span>
-                <span className="text-xs font-bold text-text uppercase tracking-wider">
-                  Peak Velocity Day
-                </span>
-              </div>
-              <strong className="text-sm font-bold text-text block mb-1">
-                {largestDay ? `${formatDate(largestDay.date)}` : 'Even Distribution'}
-              </strong>
-              <p className="text-xs text-muted">
-                {largestDay
-                  ? `${formatINR(largestDay.total_paise)} recorded across ${largestDay.transaction_count} transaction${largestDay.transaction_count === 1 ? '' : 's'}.`
-                  : 'No single outlier spike detected in this time interval.'}
-              </p>
-            </article>
+              <Panel className="p-4">
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+                  <p className="text-[11px] font-medium text-muted">Highest single day</p>
+                </div>
+                <p className="mt-2 text-[13px] font-medium text-text">
+                  {largestDay ? formatDate(largestDay.date) : 'Evenly distributed'}
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-muted">
+                  {largestDay
+                    ? `${formatINR(largestDay.total_paise)} across ${largestDay.transaction_count} transaction${
+                        largestDay.transaction_count === 1 ? '' : 's'
+                      }.`
+                    : 'No single day stands out in this range.'}
+                </p>
+              </Panel>
 
-            <article className="stat-card">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="stat-icon">
-                  <PieChart className="h-4 w-4 text-primary" />
-                </span>
-                <span className="text-xs font-bold text-text uppercase tracking-wider">
-                  Dominant Category
-                </span>
-              </div>
-              <strong className="text-sm font-bold text-text block mb-1">
-                {topType ? topType.name : 'Balanced Portfolio'}
-              </strong>
-              <p className="text-xs text-muted">
-                {topType
-                  ? `Represents ${formatPercent(topType.share_percent)}% of your expenses (${formatINR(topType.total_paise)}).`
-                  : 'Expenditures are well distributed across active categories.'}
-              </p>
-            </article>
-          </section>
-        </>
-      ) : (
-        /* Intelligent Empty State with 1-Tap Period Quick Switchers */
-        <Card className="p-8 sm:p-12 text-center mt-5">
-          <div className="max-w-md mx-auto">
-            <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-primary-soft flex items-center justify-center text-primary shadow-lg shadow-primary/20">
-              <TrendingUp className="h-8 w-8" aria-hidden="true" />
+              <Panel className="p-4">
+                <div className="flex items-center gap-2">
+                  <PieChart className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+                  <p className="text-[11px] font-medium text-muted">Largest category</p>
+                </div>
+                <p className="mt-2 text-[13px] font-medium text-text">
+                  {topType ? topType.name : 'No dominant category'}
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-muted">
+                  {topType
+                    ? `${formatPercent(topType.share_percent)}% of spend (${formatINR(topType.total_paise)}).`
+                    : 'Spending is spread across the recorded categories.'}
+                </p>
+              </Panel>
             </div>
-            <h2 className="text-lg font-bold text-text font-display">No trend data in this range</h2>
-            <p className="text-sm text-muted mt-2 mb-6">
-              There are no recorded transactions between{' '}
-              <span className="font-semibold text-text">{formatRangeLabel(period.range)}</span>. Switch to a wider range or record a transaction.
-            </p>
+          </>
+        ) : (
+          <Panel className="mt-4">
+            <EmptyState
+              icon={TrendingUp}
+              title="No trend data in this range"
+              description={`Nothing was recorded for ${formatRangeLabel(period.range)}. Try a wider range or add an expense.`}
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button variant="secondary" onClick={() => period.setPreset('last_30')}>
+                    Last 30 days
+                  </Button>
+                  <Button variant="secondary" onClick={() => period.setPreset('year')}>
+                    This year
+                  </Button>
+                  <Button variant="primary" onClick={() => openCreate()}>
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    Add expense
+                  </Button>
+                </div>
+              }
+            />
+          </Panel>
+        )}
+      </>
+    )
+  })()
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => period.setPreset('last_30')}
-                className="button button-secondary w-full sm:w-auto"
-              >
-                <span>View Last 30 Days</span>
-                <ArrowUpRight className="h-4 w-4 ml-1" />
-              </button>
-              <button
-                type="button"
-                onClick={() => period.setPreset('year')}
-                className="button button-secondary w-full sm:w-auto"
-              >
-                <span>View This Year</span>
-                <ArrowUpRight className="h-4 w-4 ml-1" />
-              </button>
-              <button
-                type="button"
-                onClick={() => openCreate()}
-                className="button button-primary w-full sm:w-auto"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                <span>Add expense</span>
-              </button>
-            </div>
-          </div>
-        </Card>
-      )}
-    </div>
-  )
+  if (embedded) return <div>{content}</div>
+  return <AppPage>{content}</AppPage>
 }

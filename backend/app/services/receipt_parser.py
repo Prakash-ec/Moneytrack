@@ -100,6 +100,9 @@ class BaseReceiptParser(ABC):
     def parse(self, text: str, existing_types: Sequence[ExpenseType]) -> ReceiptParseResponse:
         pass
 
+    def parse_text(self, text: str, existing_types: Sequence[ExpenseType]) -> ReceiptParseResponse:
+        return self.parse(text, existing_types)
+
     def parse_image(
         self,
         image_bytes: bytes,

@@ -1,0 +1,194 @@
+/* ------------------------------------------------------------------
+   MoneyTrack design tokens — single source of truth.
+   Every colour pair below was contrast-checked against WCAG 2.2 AA:
+   body text >= 4.5:1, large text / UI boundaries >= 3:1.
+   Rule: brand green is NOT income green. Direction is also encoded by
+   icon + sign, never colour alone.
+   ------------------------------------------------------------------ */
+
+:root {
+  color-scheme: light;
+
+  /* Typography */
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'Inter Variable', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Brand — primary green (white on #16845B = 4.68:1) */
+  --primary: #16845b;
+  --primary-hover: #11694a;
+  --primary-soft: #f7fdfb; /* #16845B on soft = 4.55:1 */
+  --primary-ink: #0f6b49; /* stronger text on tinted surfaces (6.01:1) */
+  --primary-contrast: #ffffff;
+  --primary-border: #b7e3d2;
+
+  /* Neutral graphite surfaces */
+  --bg: #fafafa;
+  --sidebar: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #f4f4f5;
+  --text: #171717;
+  --muted: #525252; /* 7.81:1 on white */
+  --muted-2: #737373; /* 4.74:1 on white */
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --border-input: #8a8a93; /* 3.42:1 on white — component boundary */
+
+  /* Semantic financial colours (distinct from brand green) */
+  --positive: #15803d; /* 5.02:1 on white */
+  --positive-hover: #166534;
+  --positive-soft: #f0fdf4;
+  --positive-border: #bbf7d0;
+
+  --danger: #dc2626; /* 4.83:1 on white */
+  --danger-hover: #b91c1c;
+  --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-contrast: #ffffff;
+
+  --warning: #b45309; /* 5.02:1 on white */
+  --warning-soft: #fffbeb;
+  --warning-border: #fde68a;
+
+  --info: #2563eb; /* 5.17:1 on white */
+  --info-soft: #eff6ff;
+  --info-border: #bfdbfe;
+
+  /* Charts — one accent leads, the rest are neutral/de-emphasised */
+  --chart-1: #16845b;
+  --chart-2: #0ea5e9;
+  --chart-3: #b45309;
+  --chart-4: #7c3aed;
+  --chart-5: #64748b;
+  --chart-income: #16a34a; /* fill only, not text */
+  --chart-expense: #dc2626;
+  --chart-grid: #e4e4e7;
+
+  /* Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-card: 14px;
+  --radius-panel: 16px;
+  --radius-full: 9999px;
+
+  /* Depth — neutral, no coloured glows */
+  --shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(22, 132, 91, 0.28);
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+
+  /* Layout */
+  --sidebar-width: 248px;
+  --content-max: 1440px;
+  --page-pad-x: 20px;
+  --page-pad-y: 24px;
+
+  /* Backwards-compatible aliases used by existing CSS/Tailwind mapping */
+  --accent: #16845b;
+  --accent-blue: #2563eb;
+  --accent-navy: #171717;
+  --accent-rose: #dc2626;
+  --accent-amber: #b45309;
+  --primary-gradient: #16845b;
+  --glass-blur: none;
+
+  --canvas: 250 250 250;
+  --line: 228 228 231;
+  --ink: 23 23 23;
+  --subtle: 115 115 115;
+  --navy: 23 23 23;
+  --gold: 180 83 9;
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Brand — lighter green, dark ink text (6.63:1) */
+  --primary: #36b889;
+  --primary-hover: #4ccb9d;
+  --primary-soft: #10251d;
+  --primary-ink: #4ccb9d;
+  --primary-contrast: #06231a;
+  --primary-border: #1d4a37;
+
+  /* Neutral obsidian surfaces */
+  --bg: #0b0f19;
+  --sidebar: #0f1422;
+  --surface: #161b26;
+  --surface-raised: #1c2333;
+  --text: #f8fafc;
+  --muted: #a3a9b8; /* 7.32:1 on surface */
+  --muted-2: #8b93a7; /* 5.60:1 on surface */
+  --border: #232b3b;
+  --border-strong: #333d52;
+  --border-input: #6b7590; /* 3.75:1 on surface */
+
+  /* Semantic financial colours */
+  --positive: #4cc38a; /* 7.78:1 on surface */
+  --positive-hover: #6ee7b7;
+  --positive-soft: #0f231b;
+  --positive-border: #1d4a37;
+
+  --danger: #f0565b; /* 5.08:1 on surface */
+  --danger-hover: #f87171;
+  --danger-soft: #2a1215;
+  --danger-border: #5a2226;
+  --danger-contrast: #2a0a0c; /* white on #f0565b fails (3.91:1) */
+
+  --warning: #f59e0b; /* 8.02:1 on surface */
+  --warning-soft: #2a1f0a;
+  --warning-border: #5a4316;
+
+  --info: #60a5fa; /* 6.78:1 on surface */
+  --info-soft: #0f1c2e;
+  --info-border: #1e3a5f;
+
+  /* Charts */
+  --chart-1: #36b889;
+  --chart-2: #38bdf8;
+  --chart-3: #f59e0b;
+  --chart-4: #a78bfa;
+  --chart-5: #94a3b8;
+  --chart-income: #4cc38a;
+  --chart-expense: #f0565b;
+  --chart-grid: #232b3b;
+
+  /* Depth — surface steps + hairline, never glow */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-focus: 0 0 0 3px rgba(54, 184, 137, 0.32);
+
+  /* Compatibility aliases */
+  --accent: #36b889;
+  --accent-blue: #60a5fa;
+  --accent-navy: #f8fafc;
+  --accent-rose: #f0565b;
+  --accent-amber: #f59e0b;
+  --primary-gradient: #36b889;
+
+  --canvas: 11 15 25;
+  --line: 35 43 59;
+  --ink: 248 250 252;
+  --subtle: 139 147 167;
+  --navy: 248 250 252;
+  --gold: 245 158 11;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --page-pad-x: 28px;
+    --page-pad-y: 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --page-pad-x: 32px;
+  }
+}

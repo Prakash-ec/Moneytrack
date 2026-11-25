@@ -5,7 +5,6 @@ import {
   Bell,
   Building2,
   Camera,
-  Database,
   LayoutDashboard,
   LogOut,
   MessageSquareText,
@@ -19,7 +18,6 @@ import {
   ShieldCheck,
   Sun,
   Tags,
-  TrendingUp,
   Wifi,
   WifiOff,
 } from 'lucide-react'
@@ -46,367 +44,375 @@ interface NavItem {
   label: string
   icon: typeof LayoutDashboard
   end?: boolean
+  description: string
 }
 
-const SIDEBAR_NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { to: '/bank-accounts', label: 'Accounts', icon: Building2 },
-  { to: '/analytics', label: 'Analytics', icon: PieChart },
-  { to: '/settings', label: 'Settings', icon: Settings },
+const PRIMARY_NAV: NavItem[] = [
+  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true, description: 'Balance and activity' },
+  { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight, description: 'Expenses, income, transfers' },
+  { to: '/bank-accounts', label: 'Accounts', icon: Building2, description: 'Balances and reconciliation' },
+  { to: '/analytics', label: 'Analytics', icon: PieChart, description: 'Trends and breakdowns' },
 ]
 
-const MOBILE_NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/transactions', label: 'Ledger', icon: ArrowLeftRight },
-  { to: '/bank-accounts', label: 'Accounts', icon: Building2 },
-  { to: '/analytics', label: 'Insights', icon: PieChart },
+const MANAGE_NAV: NavItem[] = [
+  { to: '/sms-review', label: 'SMS review', icon: MessageSquareText, description: 'Review detected payments' },
+  { to: '/expense-types', label: 'Categories', icon: Tags, description: 'Expense and income types' },
 ]
 
-function Brand({ onClick }: { onClick?: () => void }) {
+const SYSTEM_NAV: NavItem[] = [
+  { to: '/settings', label: 'Settings', icon: Settings, description: 'Preferences and data' },
+  { to: '/security', label: 'Security', icon: ShieldCheck, description: 'Alerts and fraud guidance' },
+  { to: '/notifications', label: 'Notifications', icon: Bell, description: 'Alerts and reports' },
+]
+
+const ALL_NAV = [...PRIMARY_NAV, ...MANAGE_NAV, ...SYSTEM_NAV]
+
+function Brand() {
+  const navigate = useNavigate()
   return (
-    <button type="button" className="brand" onClick={onClick} aria-label="MoneyTrack Home">
-      <span className="brand-mark h-8 w-8 min-w-[32px] max-w-[32px] min-h-[32px] max-h-[32px] shrink-0 aspect-square overflow-hidden p-1 bg-surface-elevated border border-border">
+    <button
+      type="button"
+      onClick={() => navigate('/')}
+      className="group flex items-center gap-2.5 rounded-lg px-1.5 py-1 text-left focus-visible:outline-none"
+      aria-label="MoneyTrack home"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-primary-border bg-primary-soft">
         <img
           src="/branding/moneytrack-icon.svg"
-          className="h-full w-full max-h-full max-w-full shrink-0 aspect-square object-contain block"
+          className="h-7 w-7 object-contain"
           alt=""
           aria-hidden="true"
         />
       </span>
-      <div className="min-w-0 text-left">
-        <div className="brand-title truncate">MoneyTrack</div>
-        <div className="brand-sub truncate">Private ledger</div>
-      </div>
+      <span className="min-w-0">
+        <span className="block truncate font-display text-[15px] font-semibold leading-tight tracking-[-0.02em] text-text">
+          MoneyTrack
+        </span>
+        <span className="mt-0.5 block text-[11px] font-medium leading-none text-muted">
+          Private ledger
+        </span>
+      </span>
     </button>
   )
 }
 
-function DatabaseStatusBadge() {
-  const [dbState, setDbState] = useState<{
-    provider: string
-    connected: boolean
-    status: string
-  }>({
-    provider: 'sqlite',
-    connected: true,
-    status: 'connected',
-  })
+function NavSection({
+  label,
+  items,
+  smsCount,
+}: {
+  label: string
+  items: NavItem[]
+  smsCount: number
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="px-3 pb-1 text-[11px] font-medium text-muted">{label}</p>
+      {items.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.end}
+          className={({ isActive }) =>
+            cn(
+              'group relative flex h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-colors',
+              isActive
+                ? 'bg-primary-soft text-primary'
+                : 'text-muted hover:bg-surface-raised hover:text-text',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-primary transition-opacity',
+                  isActive ? 'opacity-100' : 'opacity-0',
+                )}
+              />
+              <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              <span className="flex-1 truncate">{item.label}</span>
+              {item.to === '/sms-review' && smsCount > 0 ? (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-contrast">
+                  {smsCount > 9 ? '9+' : smsCount}
+                </span>
+              ) : null}
+            </>
+          )}
+        </NavLink>
+      ))}
+    </div>
+  )
+}
+
+function DatabaseStatus() {
+  const [state, setState] = useState({ provider: 'sqlite', connected: true })
 
   useEffect(() => {
     let active = true
-
-    const fetchDbStatus = async () => {
+    const load = async () => {
       try {
         const res = await api.databaseHealth()
-        if (active) {
-          setDbState({
-            provider: res.provider || 'sqlite',
-            connected: res.connected,
-            status: res.status,
-          })
-        }
+        if (active) setState({ provider: res.provider || 'sqlite', connected: res.connected })
       } catch {
         try {
           const fallback = await api.health()
           if (active) {
-            setDbState({
-              provider: fallback.provider || (fallback.database === 'connected' ? 'sqlite' : 'unknown'),
+            setState({
+              provider: fallback.provider || 'sqlite',
               connected: fallback.database === 'connected',
-              status: fallback.status,
             })
           }
         } catch {
-          if (active) {
-            setDbState({
-              provider: 'unknown',
-              connected: false,
-              status: 'unavailable',
-            })
-          }
+          if (active) setState({ provider: 'unknown', connected: false })
         }
       }
     }
-
-    void fetchDbStatus()
+    void load()
     return () => {
       active = false
     }
   }, [])
 
-  const getProviderInfo = () => {
-    if (!dbState.connected || dbState.status === 'unavailable') {
-      return {
-        name: 'Database Offline',
-        desc: 'Cannot reach backend database service.',
-        dot: 'bg-rose-500',
-      }
-    }
-    if (dbState.provider === 'neon') {
-      return {
-        name: 'Neon PostgreSQL',
-        desc: 'Neon Serverless Cloud Database connected.',
-        dot: 'bg-emerald-500',
-      }
-    }
-    if (dbState.provider === 'postgresql') {
-      return {
-        name: 'PostgreSQL Database',
-        desc: 'PostgreSQL cloud database connected.',
-        dot: 'bg-emerald-500',
-      }
-    }
-    return {
-      name: 'Local SQLite Database',
-      desc: 'Private on-device storage with zero cloud tracking.',
-      dot: 'bg-emerald-500',
-    }
-  }
-
-  const info = getProviderInfo()
+  const label = !state.connected
+    ? 'Database offline'
+    : state.provider === 'neon'
+      ? 'Neon PostgreSQL'
+      : state.provider === 'postgresql'
+        ? 'PostgreSQL'
+        : 'Local SQLite'
 
   return (
-    <div className="privacy-note" role="status" aria-label={`Database: ${info.name}`}>
-      <div className="privacy-note-title flex items-center justify-between">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Database className="h-3.5 w-3.5 text-primary flex-shrink-0" aria-hidden="true" />
-          <span className="truncate">{info.name}</span>
-        </div>
-        <span
-          className={cn('h-2 w-2 rounded-full flex-shrink-0', info.dot)}
-          title={dbState.connected ? 'Connected' : 'Offline'}
-        />
-      </div>
-      <div className="privacy-note-desc">
-        {info.desc}
-      </div>
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+      <span className="min-w-0">
+        <span className="block truncate text-[11px] font-medium text-text">{label}</span>
+        <span className="block text-[10px] text-muted">
+          {state.connected ? 'Encrypted at rest' : 'Connection lost'}
+        </span>
+      </span>
+      <span
+        className={cn(
+          'h-1.5 w-1.5 shrink-0 rounded-full',
+          state.connected ? 'bg-primary' : 'bg-danger',
+        )}
+        aria-label={state.connected ? 'Connected' : 'Disconnected'}
+      />
     </div>
   )
 }
 
-function Sidebar({ unauthorisedSmsCount }: { unauthorisedSmsCount: number }) {
-  const { openCreate, openScanReceipt } = useExpenseDialog()
+function Sidebar({ smsCount }: { smsCount: number }) {
   const { user, logout } = useAuth()
+  const { openCreate, openScanReceipt } = useExpenseDialog()
   const navigate = useNavigate()
 
   const handleLogout = () => {
-    const pendingCount = getOfflineQueue(user?.id).length
-    if (pendingCount > 0 && typeof window !== 'undefined') {
-      const confirmed = window.confirm(
-        `You have ${pendingCount} unsynchronized offline transaction${
-          pendingCount === 1 ? '' : 's'
-        } pending on this device.\n\nThey are preserved securely under your account and will sync automatically when you log back in.\n\nDo you want to log out now?`
+    const pending = getOfflineQueue(user?.id).length
+    if (
+      pending > 0 &&
+      !window.confirm(
+        `You have ${pending} unsynchronised transaction${pending === 1 ? '' : 's'} saved on this device. They stay tied to your account and sync when you sign back in.\n\nSign out now?`,
       )
-      if (!confirmed) return
+    ) {
+      return
     }
     logout()
   }
 
-  return (
-    <aside className="sidebar" aria-label="Sidebar navigation">
-      <Brand onClick={() => navigate('/')} />
+  const initials = (user?.full_name || user?.email || 'MT')
+    .split(/[\s@]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('')
 
-      <div className="sidebar-actions">
-        <button
-          type="button"
-          onClick={() => openCreate()}
-          className="button button-primary w-full"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          <span>Add expense</span>
-        </button>
+  return (
+    <aside
+      className="fixed inset-y-0 left-0 z-30 hidden w-[252px] flex-col border-r border-border bg-[var(--sidebar)] px-4 pb-4 pt-5 lg:flex"
+      aria-label="Sidebar"
+    >
+      <div className="flex items-center justify-between gap-2 px-1">
+        <Brand />
         <button
           type="button"
           onClick={() => openScanReceipt()}
-          className="button button-secondary w-full"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-text"
+          aria-label="Scan a receipt"
+          title="Scan a receipt"
         >
           <Camera className="h-4 w-4" aria-hidden="true" />
-          <span>Scan receipt</span>
         </button>
       </div>
 
-      <nav className="desktop-nav" aria-label="Main navigation">
-        {SIDEBAR_NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn('nav-item', isActive && 'active')
-            }
-          >
-            <item.icon className="h-4 w-4 flex-shrink-0" strokeWidth={2} aria-hidden="true" />
-            <span className="flex-1">{item.label}</span>
-            {item.to === '/sms-review' && unauthorisedSmsCount > 0 && (
-              <span className="notification-badge" title={`${unauthorisedSmsCount} new transaction review alerts`}>
-                {unauthorisedSmsCount}
-              </span>
-            )}
-          </NavLink>
-        ))}
+      <button
+        type="button"
+        onClick={() => openCreate()}
+        className="mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 text-[13px] font-semibold text-primary-contrast shadow-sm transition-colors hover:bg-primary-hover"
+      >
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        Add expense
+      </button>
+
+      <nav className="mt-6 flex flex-1 flex-col gap-5 overflow-y-auto" aria-label="Main navigation">
+        <NavSection label="Main" items={PRIMARY_NAV} smsCount={smsCount} />
+        <NavSection label="Manage" items={MANAGE_NAV} smsCount={smsCount} />
+        <NavSection label="System" items={SYSTEM_NAV} smsCount={smsCount} />
       </nav>
 
-      <div className="privacy-note mb-2">
-        <div className="flex items-center justify-between">
-          <div className="min-w-0 flex-1 pr-2">
-            <div className="truncate text-xs font-semibold text-ink">
-              {user?.full_name || 'Account'}
-            </div>
-            <div className="truncate text-[11px] text-subtle">{user?.email}</div>
-          </div>
+      <div className="mt-4 space-y-2.5">
+        <DatabaseStatus />
+        <div className="flex items-center gap-2.5 rounded-lg px-1 py-1">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-raised text-[11px] font-semibold text-muted">
+            {initials || 'MT'}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-medium text-text">
+              {user?.full_name || 'Your account'}
+            </span>
+            <span className="block truncate text-[11px] text-muted">{user?.email}</span>
+          </span>
           <button
             type="button"
             onClick={handleLogout}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+            aria-label="Sign out"
             title="Sign out"
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-danger/10 hover:text-danger"
           >
-            <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+            <LogOut className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => navigate('/settings')}
+          className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-[11px] font-medium text-muted transition-colors hover:text-text"
+        >
+          <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+          Privacy-first · local data
+        </button>
       </div>
-
-      <DatabaseStatusBadge />
     </aside>
   )
 }
 
 function Topbar({
   onOpenSearch,
-  unreadNotifCount = 0,
-  unauthorisedSmsCount = 0,
+  unreadCount,
+  smsCount,
 }: {
-  onOpenSearch?: () => void
-  unreadNotifCount?: number
-  unauthorisedSmsCount?: number
+  onOpenSearch: () => void
+  unreadCount: number
+  smsCount: number
 }) {
   const location = useLocation()
   const navigate = useNavigate()
   const online = useOnlineStatus()
   const { theme, setTheme, resolvedTheme } = useTheme()
-  const { openScanReceipt } = useExpenseDialog()
 
-  const currentNav = SIDEBAR_NAV_ITEMS.find((item) =>
-    item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
-  )
-  const title = currentNav?.label ?? (location.pathname === '/scanner' ? 'Receipt Scanner' : 'MoneyTrack')
+  const current =
+    ALL_NAV.find((item) =>
+      item.end ? location.pathname === item.to : location.pathname.startsWith(item.to),
+    ) ?? ALL_NAV[0]
 
   const toggleTheme = () => {
-    if (theme === 'system') {
-      setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
-    } else {
-      setTheme(theme === 'dark' ? 'light' : 'dark')
-    }
+    if (theme === 'system') setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
+    else setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
   return (
-    <header className="topbar">
-      <div className="flex items-center gap-3 min-w-0 shrink">
+    <header className="sticky top-0 z-20 flex h-[60px] items-center justify-between gap-3 border-b border-border bg-bg px-4 sm:px-6 lg:px-8">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
-          className="mobile-brand shrink-0 min-w-0"
           onClick={() => navigate('/')}
-          aria-label="MoneyTrack Home"
+          className="flex items-center gap-2 rounded-lg lg:hidden"
+          aria-label="MoneyTrack home"
         >
-          <span className="brand-mark h-7 w-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 aspect-square rounded-md overflow-hidden p-0.5 bg-surface-elevated border border-border">
-            <img
-              src="/branding/moneytrack-icon.svg"
-              className="h-full w-full max-h-full max-w-full shrink-0 aspect-square object-contain block"
-              alt=""
-              aria-hidden="true"
-            />
+          <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md border border-primary-border bg-primary-soft">
+            <img src="/branding/moneytrack-icon.svg" className="h-5 w-5 object-contain" alt="" aria-hidden="true" />
           </span>
-          <strong className="text-sm font-bold text-text truncate">MoneyTrack</strong>
+          <span className="font-display text-sm font-semibold tracking-[-0.02em] text-text">MoneyTrack</span>
         </button>
-        <span className="topbar-title truncate">{title}</span>
+        <div className="hidden min-w-0 lg:block">
+          <p className="truncate text-[11px] font-medium text-muted">MoneyTrack</p>
+          <h1 className="truncate font-display text-[15px] font-semibold leading-tight tracking-[-0.02em] text-text">
+            {current.label}
+          </h1>
+        </div>
+        <span className="truncate text-sm font-medium text-muted lg:hidden">{current.label}</span>
       </div>
 
-      <div className="topbar-right">
-        {onOpenSearch && (
-          <>
-            <button
-              type="button"
-              onClick={onOpenSearch}
-              className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 text-xs text-muted bg-[var(--surface-raised)] hover:bg-[var(--surface)] border border-[var(--border)] rounded-lg transition-colors focus:outline-none focus:border-primary"
-              aria-label="Search and command palette"
-            >
-              <Search className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
-              <span>Search or command…</span>
-              <kbd className="ml-1 font-mono text-[10px] bg-[var(--surface)] px-1.5 py-0.5 rounded border border-[var(--border)] text-muted">
-                ⌘K
-              </kbd>
-            </button>
-            <button
-              type="button"
-              onClick={onOpenSearch}
-              className="button button-ghost button-icon text-muted hover:text-text md:hidden"
-              title="Search transactions and commands"
-              aria-label="Open search palette"
-            >
-              <Search className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </>
-        )}
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="hidden h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-xs text-muted transition-colors hover:border-border-strong hover:text-text md:inline-flex"
+          aria-label="Search transactions and commands"
+        >
+          <Search className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Search</span>
+          <kbd className="ml-1 rounded border border-border bg-surface-raised px-1.5 py-0.5 font-mono text-[10px] text-muted">
+            ⌘K
+          </kbd>
+        </button>
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-text md:hidden"
+          aria-label="Search"
+        >
+          <Search className="h-4 w-4" aria-hidden="true" />
+        </button>
 
-        {unauthorisedSmsCount > 0 && (
+        <span
+          className={cn(
+            'hidden items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-medium sm:inline-flex',
+            online
+              ? 'border-primary-border bg-primary-soft text-primary'
+              : 'border-warning-border bg-warning-soft text-warning',
+          )}
+          title={online ? 'Connected' : 'Offline — changes queue locally'}
+        >
+          {online ? <Wifi className="h-3 w-3" aria-hidden="true" /> : <WifiOff className="h-3 w-3" aria-hidden="true" />}
+          {online ? 'Online' : 'Offline'}
+        </span>
+
+        {smsCount > 0 ? (
           <Link
             to="/sms-review"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg bg-primary/10 border border-primary/20 text-primary font-medium hover:bg-primary/20 transition-colors"
-            title={`${unauthorisedSmsCount} new payment alerts`}
+            className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-text"
+            aria-label={`${smsCount} payments awaiting review`}
+            title={`${smsCount} payments awaiting review`}
           >
-            <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">{unauthorisedSmsCount} SMS</span>
-            <span className="sm:hidden">{unauthorisedSmsCount}</span>
+            <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-contrast">
+              {smsCount > 9 ? '9+' : smsCount}
+            </span>
           </Link>
-        )}
+        ) : null}
 
         <Link
           to="/notifications"
-          className="relative button button-ghost button-icon text-muted hover:text-text"
-          title="Notification Centre"
-          aria-label="Notification Centre"
+          className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-text"
+          aria-label="Notifications"
+          title="Notifications"
         >
           <Bell className="h-4 w-4" aria-hidden="true" />
-          {unreadNotifCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white shadow-sm">
-              {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+          {unreadCount > 0 ? (
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
             </span>
-          )}
+          ) : null}
         </Link>
-
-        {online ? (
-          <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-muted">
-            <Wifi className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-            <span>Online</span>
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 text-xs text-warning">
-            <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Offline ready</span>
-          </span>
-        )}
 
         <button
           type="button"
           onClick={toggleTheme}
-          className="button button-ghost button-icon text-muted hover:text-text"
-          title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
-          aria-label="Toggle theme"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-text"
+          aria-label="Toggle colour theme"
+          title="Toggle colour theme"
         >
-          {resolvedTheme === 'dark' ? (
-            <Sun className="h-4 w-4" aria-hidden="true" />
-          ) : (
-            <Moon className="h-4 w-4" aria-hidden="true" />
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => openScanReceipt()}
-          className="button button-secondary button-sm sm:hidden"
-          aria-label="Scan receipt"
-        >
-          <Camera className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Scan</span>
+          {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
         </button>
       </div>
     </header>
@@ -414,46 +420,67 @@ function Topbar({
 }
 
 function MobileNav({
-  unauthorisedSmsCount,
-  unreadNotifCount = 0,
-  onMoreClick,
-  isMoreActive,
+  smsCount,
+  unreadCount,
+  onMore,
+  moreActive,
 }: {
-  unauthorisedSmsCount: number
-  unreadNotifCount?: number
-  onMoreClick: () => void
-  isMoreActive: boolean
+  smsCount: number
+  unreadCount: number
+  onMore: () => void
+  moreActive: boolean
 }) {
-  return (
-    <nav className="mobile-nav" aria-label="Mobile navigation">
-      {MOBILE_NAV_ITEMS.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.end}
-          className={({ isActive }) => (isActive ? 'active' : '')}
-        >
-          <div className="relative inline-flex items-center justify-center">
-            <item.icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          </div>
-          <span>{item.label}</span>
-        </NavLink>
-      ))}
+  const { openCreate } = useExpenseDialog()
+  const itemClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      'flex h-full flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors',
+      isActive ? 'text-primary' : 'text-muted',
+    )
 
-      <button
-        type="button"
-        onClick={onMoreClick}
-        className={isMoreActive ? 'active' : ''}
-        aria-label="More navigation items"
-      >
-        <div className="relative inline-flex items-center justify-center">
-          <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          {(unauthorisedSmsCount > 0 || unreadNotifCount > 0) && (
-            <span className="notification-badge absolute -top-1.5 -right-2 text-[9px] min-w-[14px] h-[14px] p-0 flex items-center justify-center bg-danger">
-              {unauthorisedSmsCount + unreadNotifCount}
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 grid h-[calc(62px+env(safe-area-inset-bottom))] grid-cols-5 border-t border-border bg-surface px-1 pb-[env(safe-area-inset-bottom)] lg:hidden"
+      aria-label="Mobile navigation"
+    >
+      <NavLink to="/" end className={itemClass}>
+        <LayoutDashboard className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+        <span>Overview</span>
+      </NavLink>
+      <NavLink to="/transactions" className={itemClass}>
+        <ArrowLeftRight className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+        <span>Ledger</span>
+      </NavLink>
+
+      <div className="relative flex items-center justify-center">
+        <button
+          type="button"
+          onClick={() => openCreate()}
+          className="absolute -top-5 flex h-12 w-12 items-center justify-center rounded-full border-4 border-bg bg-primary text-primary-contrast shadow-[0_6px_18px_rgba(15,23,42,0.18)] transition-colors hover:bg-primary-hover"
+          aria-label="Add expense"
+        >
+          <Plus className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </div>
+
+      <NavLink to="/sms-review" className={itemClass}>
+        <span className="relative">
+          <MessageSquareText className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+          {smsCount > 0 ? (
+            <span className="absolute -right-2 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold text-primary-contrast">
+              {smsCount > 9 ? '9+' : smsCount}
             </span>
-          )}
-        </div>
+          ) : null}
+        </span>
+        <span>Review</span>
+      </NavLink>
+
+      <button type="button" onClick={onMore} className={cn('flex h-full flex-col items-center justify-center gap-1 text-[10px] font-medium', moreActive ? 'text-primary' : 'text-muted')}>
+        <span className="relative">
+          <MoreHorizontal className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+          {unreadCount > 0 ? (
+            <span className="absolute -right-2 -top-1.5 h-2 w-2 rounded-full bg-danger" aria-hidden="true" />
+          ) : null}
+        </span>
         <span>More</span>
       </button>
     </nav>
@@ -466,55 +493,44 @@ export function AppLayout() {
   const navigate = useNavigate()
   const { invalidate } = useDataRefresh()
   const { showToast } = useToast()
-  const { openCreate } = useExpenseDialog()
   const { user } = useAuth()
   const [offlineCount, setOfflineCount] = useState(() => getOfflineQueue(user?.id).length)
   const [syncingOffline, setSyncingOffline] = useState(false)
-  const [unauthorisedSmsCount, setUnauthorisedSmsCount] = useState(0)
-  const [unreadNotifCount, setUnreadNotifCount] = useState(0)
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [smsCount, setSmsCount] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [commandOpen, setCommandOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
-  const isMoreActive = [
-    '/income',
-    '/transfers',
-    '/breakdown',
-    '/expense-types',
-    '/trends',
-    '/security',
-    '/sms-review',
-    '/notifications',
-    '/settings',
-  ].some((p) => location.pathname.startsWith(p))
+  const moreActive = ['/income', '/transfers', '/breakdown', '/expense-types', '/trends', '/security', '/sms-review', '/notifications', '/settings'].some(
+    (path) => location.pathname.startsWith(path),
+  )
 
-  // Polling unread notification count
   const checkNotifications = useCallback(async () => {
     try {
       const res = await api.getNotifications(true)
-      setUnreadNotifCount(res.unread_count)
+      setUnreadCount(res.unread_count)
     } catch {
-      // offline or waiting
+      /* offline */
     }
   }, [])
 
   useEffect(() => {
     void checkNotifications()
-    const interval = setInterval(() => void checkNotifications(), 15000)
-    return () => clearInterval(interval)
+    const timer = setInterval(() => void checkNotifications(), 15000)
+    return () => clearInterval(timer)
   }, [checkNotifications])
 
-  // Keyboard shortcut: Cmd+K / Ctrl+K and '/' for command palette
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setCommandPaletteOpen((prev) => !prev)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setCommandOpen((open) => !open)
       } else if (
-        e.key === '/' &&
-        !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)
+        event.key === '/' &&
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes((event.target as HTMLElement)?.tagName)
       ) {
-        e.preventDefault()
-        setCommandPaletteOpen(true)
+        event.preventDefault()
+        setCommandOpen(true)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -524,21 +540,20 @@ export function AppLayout() {
   const checkPendingSms = useCallback(async () => {
     try {
       const res = await SmsPlugin.getPendingTransactions()
-      const pending = res.items.filter(
-        (i) => i.status === 'PENDING_REVIEW' || i.status === 'READY_TO_SYNC',
-      ).length
-      setUnauthorisedSmsCount(pending)
+      setSmsCount(
+        res.items.filter((item) => item.status === 'PENDING_REVIEW' || item.status === 'READY_TO_SYNC').length,
+      )
     } catch {
-      // web
+      /* web or plugin unavailable */
     }
   }, [])
 
   useEffect(() => {
     void checkPendingSms()
-    const interval = setInterval(() => void checkPendingSms(), 10000)
+    const timer = setInterval(() => void checkPendingSms(), 10000)
     window.addEventListener('moneytrack:sms-changed', checkPendingSms)
     return () => {
-      clearInterval(interval)
+      clearInterval(timer)
       window.removeEventListener('moneytrack:sms-changed', checkPendingSms)
     }
   }, [checkPendingSms])
@@ -557,35 +572,30 @@ export function AppLayout() {
       setOfflineCount(getOfflineQueue(user?.id).length)
       if (res.synced > 0) {
         showToast({
-          title: 'Offline sync complete',
-          description: `Synced ${res.synced} offline transaction${res.synced === 1 ? '' : 's'}.`,
+          title: 'Offline transactions synced',
+          description: `Saved ${res.synced} transaction${res.synced === 1 ? '' : 's'} to your ledger.`,
         })
         invalidate()
       }
     } catch {
-      showToast({ title: 'Sync failed', description: 'Could not sync offline transactions.', variant: 'error' })
+      showToast({ title: 'Sync failed', description: 'Your transactions remain saved on this device.', variant: 'error' })
     } finally {
       setSyncingOffline(false)
     }
   }, [user?.id, showToast, invalidate])
 
   useEffect(() => {
-    if (online && offlineCount > 0 && !syncingOffline) {
-      handleSyncOffline()
-    }
+    if (online && offlineCount > 0 && !syncingOffline) void handleSyncOffline()
   }, [online, offlineCount, syncingOffline, handleSyncOffline])
 
   useEffect(() => {
-    const stopKeepAlive = startKeepAliveService()
-    return () => {
-      stopKeepAlive()
-    }
+    const stop = startKeepAliveService()
+    return () => stop()
   }, [])
 
   return (
-    <div className="app-shell">
-      {/* Floating status pills at top center - never disrupts flex layout */}
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1.5 pointer-events-none">
+    <div className="min-h-dvh bg-bg text-text">
+      <div className="pointer-events-none fixed left-1/2 top-3 z-[100] flex -translate-x-1/2 flex-col items-center gap-1.5">
         <BackendWakingBanner />
         <OfflineBanner />
       </div>
@@ -597,252 +607,119 @@ export function AppLayout() {
         Skip to content
       </a>
 
-      <Sidebar unauthorisedSmsCount={unauthorisedSmsCount} />
+      <Sidebar smsCount={smsCount} />
 
-      <div className="app-main">
-        <Topbar
-          onOpenSearch={() => setCommandPaletteOpen(true)}
-          unreadNotifCount={unreadNotifCount}
-          unauthorisedSmsCount={unauthorisedSmsCount}
-        />
+      <div className="lg:pl-[252px]">
+        <Topbar onOpenSearch={() => setCommandOpen(true)} unreadCount={unreadCount} smsCount={smsCount} />
 
-        {!online && (
-          <div className="flex items-center justify-center gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs font-medium text-warning">
+        {!online ? (
+          <div className="flex items-center justify-center gap-2 border-b border-warning-border bg-warning-soft px-4 py-2 text-[11px] font-medium text-warning">
             <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>You are offline. New expenses will be saved locally and synced once reconnected.</span>
+            Offline. New transactions are saved on this device and sync automatically.
           </div>
-        )}
+        ) : null}
 
-        {offlineCount > 0 && (
-          <div className="flex items-center justify-between border-b border-primary/20 bg-primary-soft px-4 py-2 text-xs text-primary sm:px-6">
-            <span className="flex items-center gap-2 font-medium">
-              <RefreshCw className={cn('h-3.5 w-3.5', syncingOffline && 'animate-spin')} aria-hidden="true" />
-              <span>{offlineCount} transaction{offlineCount === 1 ? '' : 's'} stored offline awaiting sync</span>
+        {offlineCount > 0 ? (
+          <div className="flex items-center justify-between gap-3 border-b border-primary-border bg-primary-soft px-4 py-2 text-[11px] text-primary sm:px-6 lg:px-8">
+            <span className="flex min-w-0 items-center gap-2 font-medium">
+              <RefreshCw className={cn('h-3.5 w-3.5 shrink-0', syncingOffline && 'animate-spin')} aria-hidden="true" />
+              <span className="truncate">
+                {offlineCount} transaction{offlineCount === 1 ? '' : 's'} waiting to sync
+              </span>
             </span>
             <button
               type="button"
               disabled={syncingOffline || !online}
-              onClick={handleSyncOffline}
-              className="button button-primary button-sm"
+              onClick={() => void handleSyncOffline()}
+              className="shrink-0 rounded-md border border-primary-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary disabled:opacity-50"
             >
               {syncingOffline ? 'Syncing…' : 'Sync now'}
             </button>
           </div>
-        )}
+        ) : null}
 
-        {unauthorisedSmsCount > 0 && location.pathname !== '/sms-review' && (
-          <div className="sms-alert-banner mx-4 sm:mx-8 mt-4">
-            <div className="flex items-center gap-3">
-              <span className="notification-badge">{unauthorisedSmsCount}</span>
-              <div>
-                <strong className="text-xs font-semibold text-[var(--text)]">
-                  Review Required: {unauthorisedSmsCount} new transaction{unauthorisedSmsCount > 1 ? 's' : ''} awaiting review
-                </strong>
-                <p className="text-[11px] text-[var(--muted)]">
-                  Review and confirm details to record {unauthorisedSmsCount > 1 ? 'them' : 'it'} into your accounts.
+        {smsCount > 0 && location.pathname !== '/sms-review' ? (
+          <div className="mx-4 mt-4 flex items-center justify-between gap-3 rounded-xl border border-primary-border bg-primary-soft px-4 py-3 sm:mx-6 lg:mx-8">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-primary">
+                <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-text">
+                  {smsCount} payment{smsCount === 1 ? '' : 's'} need review
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-muted">
+                  Confirm direction and amount before posting to your ledger.
                 </p>
               </div>
             </div>
-            <Link to="/sms-review" className="button button-primary button-sm shrink-0 flex items-center gap-1.5">
-              <span>Review now</span>
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            <Link
+              to="/sms-review"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-contrast"
+            >
+              Review
+              <ArrowRight className="h-3 w-3" aria-hidden="true" />
             </Link>
           </div>
-        )}
+        ) : null}
 
-        <main id="main-content" className="flex-1">
+        <main id="main-content" className="pb-[calc(78px+env(safe-area-inset-bottom))] lg:pb-0">
           <Outlet />
         </main>
       </div>
 
-      <button
-        type="button"
-        className="fab"
-        onClick={() => openCreate()}
-        aria-label="Add expense"
-      >
-        <Plus className="h-6 w-6" aria-hidden="true" />
-      </button>
-
       <MobileNav
-        unauthorisedSmsCount={unauthorisedSmsCount}
-        unreadNotifCount={unreadNotifCount}
-        onMoreClick={() => setMoreMenuOpen(true)}
-        isMoreActive={isMoreActive}
+        smsCount={smsCount}
+        unreadCount={unreadCount}
+        onMore={() => setMoreOpen(true)}
+        moreActive={moreActive}
       />
 
       <Modal
-        open={moreMenuOpen}
-        onClose={() => setMoreMenuOpen(false)}
-        title="Quick Navigation & Tools"
-        description="Jump to all MoneyTrack features"
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title="More"
+        description="Every MoneyTrack surface, one tap away."
+        size="md"
       >
-        <div className="grid grid-cols-2 gap-2.5 pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/income')
-            }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
-          >
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
-              <ArrowDownLeft className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text">Income</div>
-              <div className="text-[10px] text-muted">Earnings & Salary</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/transfers')
-            }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
-          >
-            <div className="p-2 rounded-lg bg-sky-500/10 text-sky-400">
-              <ArrowLeftRight className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text">Transfers</div>
-              <div className="text-[10px] text-muted">Between Accounts</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/breakdown')
-            }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
-          >
-            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
-              <PieChart className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text">Breakdown</div>
-              <div className="text-[10px] text-muted">Category Analytics</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/expense-types')
-            }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
-          >
-            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
-              <Tags className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text">Expense Types</div>
-              <div className="text-[10px] text-muted">Categories</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/trends')
-            }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
-          >
-            <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text">Trends</div>
-              <div className="text-[10px] text-muted">Spending Velocity</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/security')
-            }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
-          >
-            <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text">Security</div>
-              <div className="text-[10px] text-muted">Fraud Detection</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/sms-review')
-            }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition relative"
-          >
-            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
-              <MessageSquareText className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold text-text flex items-center justify-between">
-                <span>SMS Review</span>
-                {unauthorisedSmsCount > 0 && <span className="notification-badge">{unauthorisedSmsCount}</span>}
-              </div>
-              <div className="text-[10px] text-muted">Auto-detected</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/notifications')
-            }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
-          >
-            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
-              <Bell className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold text-text flex items-center justify-between">
-                <span>Alerts</span>
-                {unreadNotifCount > 0 && <span className="notification-badge">{unreadNotifCount}</span>}
-              </div>
-              <div className="text-[10px] text-muted">Notifications</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMoreMenuOpen(false)
-              navigate('/settings')
-            }}
-            className="col-span-2 flex items-center gap-3 p-3 rounded-xl bg-surface-raised hover:bg-primary-soft border border-border text-left transition"
-          >
-            <div className="p-2 rounded-lg bg-slate-500/10 text-slate-400">
-              <Settings className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text">Settings & Backup</div>
-              <div className="text-[10px] text-muted">Preferences, Theme, and Data Export/Restore</div>
-            </div>
-          </button>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { to: '/income', label: 'Income', description: 'Salary and inflows', icon: ArrowDownLeft },
+              { to: '/transfers', label: 'Transfers', description: 'Between accounts', icon: ArrowLeftRight },
+              { to: '/analytics', label: 'Analytics', description: 'Trends and shares', icon: PieChart },
+              { to: '/expense-types', label: 'Categories', description: 'Expense and income types', icon: Tags },
+              { to: '/security', label: 'Security', description: 'Alerts and guidance', icon: ShieldCheck },
+              { to: '/notifications', label: 'Notifications', description: 'Reports and alerts', icon: Bell },
+              { to: '/settings', label: 'Settings', description: 'Preferences and data', icon: Settings },
+              { to: '/bank-accounts', label: 'Accounts', description: 'Balances and reconciliation', icon: Building2 },
+            ].map((item) => (
+              <button
+                key={item.to}
+                type="button"
+                onClick={() => {
+                  setMoreOpen(false)
+                  navigate(item.to)
+                }}
+                className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3 text-left transition-colors hover:bg-surface-raised"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
+                  <item.icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-semibold text-text">{item.label}</span>
+                  <span className="block truncate text-[10px] text-muted">{item.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="text-center text-[10px] text-muted">
+            MoneyTrack stores your ledger on your account. SMS review never posts without confirmation.
+          </p>
         </div>
       </Modal>
 
-      <CommandPalette
-        open={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-      />
+      <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} />
     </div>
   )
 }
