@@ -1,9 +1,7 @@
 name: Production Keep-Alive Ping
 
 on:
-  schedule:
-    # Run every 12 minutes to keep Render Free tier active (Render sleeps after 15 min idle)
-    - cron: '*/12 * * * *'
+  # Cron disabled so Neon PostgreSQL can auto-suspend when idle instead of exhausting free-tier compute quota.
   workflow_dispatch:
     # Allows manual triggering from GitHub Actions tab anytime
 
