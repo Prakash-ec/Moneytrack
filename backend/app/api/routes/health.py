@@ -45,6 +45,18 @@ def _check_db_status(db: Session) -> tuple[str, str, bool, str | None]:
     return database, schema_status, is_connected, current_rev
 
 
+@router.get("/health/live", summary="Application liveness check (no database query)")
+def liveness_health() -> dict[str, str]:
+    """Pure process liveness probe that never queries PostgreSQL/SQLite."""
+    return {
+        "status": "ok",
+        "app": settings.app_name,
+        "version": settings.app_version,
+        "environment": settings.environment,
+        "check": "liveness",
+    }
+
+
 @router.get("/health", response_model=HealthRead, summary="Application health")
 def health(db: Session = Depends(get_db)) -> HealthRead:
     database, schema_status, is_connected, current_rev = _check_db_status(db)

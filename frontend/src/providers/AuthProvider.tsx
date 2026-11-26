@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { SetupStatus, User } from '@/types/api'
+import { ApiError } from '@/services/api'
 import {
   fetchCurrentUser,
   fetchSetupStatus,
@@ -63,10 +64,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(profile)
               setToken(currentToken)
             }
-          } catch {
+          } catch (err) {
             if (isMounted) {
-              setUser(null)
-              setToken(null)
+              if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+                setUser(null)
+                setToken(null)
+              } else {
+                // Keep cached offline session when backend is temporarily unreachable
+                setToken(currentToken)
+              }
             }
           }
         } else {

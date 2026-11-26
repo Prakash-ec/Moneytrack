@@ -17,7 +17,7 @@ class SmsIngestRequest(BaseModel):
     reference: str | None = None
     transaction_date: str | None = None  # ISO yyyy-MM-dd
     transaction_time: str | None = None  # ISO timestamp
-    direction: Literal["CREDIT", "DEBIT", "TRANSFER", "UNKNOWN"] = "DEBIT"
+    direction: Literal["CREDIT", "DEBIT", "TRANSFER", "UNKNOWN"] = "UNKNOWN"
     available_balance_paise: int | None = None
     ledger_balance_paise: int | None = None
     balance_type: str | None = None  # AVAILABLE, LEDGER

@@ -67,6 +67,11 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
   const [deleteTarget, setDeleteTarget] = useState<Income | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Quick income category creation state
+  const [createTypeOpen, setCreateTypeOpen] = useState(false)
+  const [newTypeName, setNewTypeName] = useState('')
+  const [creatingType, setCreatingType] = useState(false)
+
   const incomeTypesQuery = useApiQuery(['income-types'], () => api.listIncomeTypes())
   const bankAccountsQuery = useApiQuery(['bank-accounts'], () => api.listBankAccounts())
   const cashflowQuery = useApiQuery(['cashflow', start, end], () =>
@@ -93,6 +98,30 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
   const cashflow = cashflowQuery.data
   const hasFilters = Boolean(debouncedSearch || selectedAccountId || selectedTypeId)
 
+  const handleCreateIncomeType = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = newTypeName.trim()
+    if (!trimmed) return
+    setCreatingType(true)
+    try {
+      const created = await api.createIncomeType({ name: trimmed })
+      setFormTypeId(created.id)
+      setNewTypeName('')
+      setCreateTypeOpen(false)
+      invalidate()
+      incomeTypesQuery.refetch()
+      showToast({ title: 'Category created', description: `Added "${created.name}".` })
+    } catch (err) {
+      showToast({
+        title: 'Could not create category',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'error',
+      })
+    } finally {
+      setCreatingType(false)
+    }
+  }
+
   const openCreateDialog = () => {
     setEditingIncome(null)
     setFormAmount('')
@@ -113,7 +142,11 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
     setFormAccountId(income.account_id ?? '')
     setFormDate(income.income_date)
     setFormPayer(income.payer ?? '')
-    setFormPaymentMethod(income.payment_method ?? 'UPI')
+    const matchedMethod =
+      PAYMENT_METHODS.find(
+        (method) => method.toLowerCase() === (income.payment_method ?? '').toLowerCase(),
+      ) ?? 'UPI'
+    setFormPaymentMethod(matchedMethod)
     setFormReference(income.reference ?? '')
     setFormNote(income.note ?? '')
     setIsDialogOpen(true)
@@ -322,7 +355,7 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
               ) : null}
             </label>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Select
                 value={selectedAccountId ?? ''}
                 onChange={(event) => {
@@ -377,7 +410,7 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
                   {hasFilters ? ' matching filters' : ''}
                 </span>
                 <span className="font-mono tabular-nums text-text">
-                  Page total {formatINR(pageInflowPaise)}
+                  Filtered total {formatINR(incomesQuery.data?.total_paise ?? pageInflowPaise)}
                 </span>
               </div>
 
@@ -553,6 +586,8 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
               options={incomeTypes}
               placeholder="Select income category…"
               suggestions={incomeTypes.slice(0, 4)}
+              onCreateNew={() => setCreateTypeOpen(true)}
+              createButtonLabel="New income category"
             />
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -637,6 +672,37 @@ export function IncomePage({ embedded = false }: { embedded?: boolean } = {}) {
           onConfirm={handleDelete}
           onClose={() => setDeleteTarget(null)}
         />
+
+        <Modal
+          open={createTypeOpen}
+          onClose={() => setCreateTypeOpen(false)}
+          title="New income category"
+          description="Create a custom category for organizing your inflows."
+          size="sm"
+          footer={
+            <div className="flex w-full justify-end gap-2">
+              <Button variant="ghost" onClick={() => setCreateTypeOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="create-income-type-form" loading={creatingType}>
+                Create category
+              </Button>
+            </div>
+          }
+        >
+          <form id="create-income-type-form" onSubmit={handleCreateIncomeType} className="space-y-3">
+            <Field label="Category name" required>
+              <Input
+                type="text"
+                required
+                value={newTypeName}
+                onChange={(event) => setNewTypeName(event.target.value)}
+                placeholder="e.g. Consulting, Dividends, Bonus"
+                autoFocus
+              />
+            </Field>
+          </form>
+        </Modal>
       </>
     )
   })()

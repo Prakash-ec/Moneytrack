@@ -9,6 +9,7 @@ import { Field, Textarea } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
 import { Panel, PanelHeader } from '@/components/ui/Panel'
 import { CardSkeleton, EmptyState, ErrorState } from '@/components/ui/States'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useToast } from '@/providers/ToastProvider'
 import { api, ApiError } from '@/services/api'
 import type { SecurityActionResponse, SecurityAlert, SecuritySummary } from '@/types/api'
@@ -40,6 +41,7 @@ function severityTone(severity: SecurityAlert['severity']) {
 }
 
 export default function SecurityCentrePage() {
+  useDocumentTitle('Security centre')
   const { showToast } = useToast()
   const [summary, setSummary] = useState<SecuritySummary | null>(null)
   const [alerts, setAlerts] = useState<SecurityAlert[]>([])
@@ -324,7 +326,7 @@ export default function SecurityCentrePage() {
             >
               <p className="text-[12px] font-medium text-text">{item.bank}</p>
               <a
-                href={`tel:${item.phone.split(' ')[0]}`}
+                href={`tel:${item.phone.split('/')[0].replace(/\s+/g, '')}`}
                 className="mt-1 block font-mono text-[11px] text-primary hover:underline"
               >
                 {item.phone}
@@ -415,12 +417,16 @@ export default function SecurityCentrePage() {
                 </p>
               </div>
 
-              {disputeResult.fraud_guidance ? (
+              {disputeResult.fraud_guidance && disputeResult.fraud_guidance.length > 0 ? (
                 <div>
                   <p className="text-[12px] font-medium text-text">Recommended immediate actions</p>
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[11px] leading-5 text-muted">
                     {disputeResult.fraud_guidance.map((step, index) => (
-                      <li key={index}>{step}</li>
+                      <li key={index}>
+                        {typeof step === 'string'
+                          ? step
+                          : `${step.bank_name}: ${step.phone}${step.sms_block_keyword ? ` (${step.sms_block_keyword})` : ''}`}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -432,7 +438,9 @@ export default function SecurityCentrePage() {
                   {disputeResult.cybercrime_helpline || '1930'}
                 </p>
                 <p className="mt-1 break-all text-[11px] text-muted">
-                  {disputeResult.cybercrime_url || 'https://cybercrime.gov.in'}
+                  {disputeResult.cybercrime_portal ||
+                    disputeResult.cybercrime_url ||
+                    'https://cybercrime.gov.in'}
                 </p>
               </div>
             </div>

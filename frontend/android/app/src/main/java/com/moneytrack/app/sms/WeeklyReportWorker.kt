@@ -39,10 +39,11 @@ class WeeklyReportWorker(context: Context, params: WorkerParameters) : Worker(co
             return Result.success()
         }
 
+        var conn: HttpURLConnection? = null
         try {
             val endpointUrl = SyncWorker.buildEndpointUrl(backendUrl, "/api/reports/weekly")
             val url = URL(endpointUrl)
-            val conn = (url.openConnection() as HttpURLConnection).apply {
+            conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 10000
                 readTimeout = 10000
@@ -54,7 +55,6 @@ class WeeklyReportWorker(context: Context, params: WorkerParameters) : Worker(co
             if (code in 200..299) {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
                 val responseText = reader.use { it.readText() }
-                conn.disconnect()
 
                 val json = JSONObject(responseText)
                 val periodLabel = json.optString("period_label", "Last Week")
@@ -71,16 +71,16 @@ class WeeklyReportWorker(context: Context, params: WorkerParameters) : Worker(co
                 return Result.success()
             } else if (code == 401) {
                 Log.w(TAG, "Backend returned HTTP 401 (Authentication required/expired); skipping weekly report.")
-                conn.disconnect()
                 return Result.success()
             } else {
                 Log.w(TAG, "Backend returned HTTP $code when querying weekly report")
-                conn.disconnect()
                 return Result.retry()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch weekly report: ${e.message}", e)
             return Result.retry()
+        } finally {
+            conn?.disconnect()
         }
     }
 

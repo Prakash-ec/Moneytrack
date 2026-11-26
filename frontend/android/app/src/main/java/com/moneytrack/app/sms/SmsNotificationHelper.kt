@@ -276,6 +276,7 @@ object SmsNotificationHelper {
             android.util.Log.i("MoneyTrackNotif", "Posting notification: tag=$tag id=$id channel=$channelId title=$title")
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 data = android.net.Uri.parse(deepLink)
+                setPackage(context.packageName)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val pendingIntent = PendingIntent.getActivity(

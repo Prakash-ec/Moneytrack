@@ -37,6 +37,7 @@ import { api } from '@/services/api'
 import { startKeepAliveService } from '@/services/keepAlive'
 import { flushOfflineQueue, getOfflineQueue } from '@/services/offlineQueue'
 import { SmsPlugin } from '@/services/sms'
+import { Capacitor } from '@capacitor/core'
 import { cn } from '@/utils/cn'
 
 interface NavItem {
@@ -506,18 +507,22 @@ export function AppLayout() {
   )
 
   const checkNotifications = useCallback(async () => {
+    if (!online || !user) return
     try {
       const res = await api.getNotifications(true)
       setUnreadCount(res.unread_count)
     } catch {
       /* offline */
     }
-  }, [])
+  }, [online, user])
 
   useEffect(() => {
     void checkNotifications()
-    const timer = setInterval(() => void checkNotifications(), 15000)
-    return () => clearInterval(timer)
+    const handleNotificationsChanged = () => void checkNotifications()
+    window.addEventListener('moneytrack:notifications-changed', handleNotificationsChanged)
+    return () => {
+      window.removeEventListener('moneytrack:notifications-changed', handleNotificationsChanged)
+    }
   }, [checkNotifications])
 
   useEffect(() => {
@@ -550,10 +555,12 @@ export function AppLayout() {
 
   useEffect(() => {
     void checkPendingSms()
-    const timer = setInterval(() => void checkPendingSms(), 10000)
+    const timer = Capacitor.isNativePlatform()
+      ? setInterval(() => void checkPendingSms(), 30000)
+      : null
     window.addEventListener('moneytrack:sms-changed', checkPendingSms)
     return () => {
-      clearInterval(timer)
+      if (timer) clearInterval(timer)
       window.removeEventListener('moneytrack:sms-changed', checkPendingSms)
     }
   }, [checkPendingSms])

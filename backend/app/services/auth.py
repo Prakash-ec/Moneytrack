@@ -25,21 +25,25 @@ settings = get_settings()
 
 
 SYSTEM_EXPENSE_TYPE_KEYS = {
+    "food & dining",
     "food_&_dining",
     "groceries",
     "transportation",
     "fuel",
     "utilities",
+    "mobile recharge",
     "mobile_recharge",
     "shopping",
     "medical",
     "entertainment",
+    "rent & maintenance",
     "rent_&_maintenance",
     "education",
     "other",
 }
 
 SYSTEM_INCOME_TYPE_KEYS = {
+    "other income",
     "other_income",
     "salary",
     "freelance",
@@ -151,14 +155,25 @@ def register_user(db: Session, data: UserCreate) -> tuple[User, str]:
         return user, token
 
 
+_DUMMY_PASSWORD_HASH: str | None = None
+
+
+def _dummy_hash() -> str:
+    global _DUMMY_PASSWORD_HASH
+    if _DUMMY_PASSWORD_HASH is None:
+        _DUMMY_PASSWORD_HASH = hash_password("constant-time-dummy-password-check")
+    return _DUMMY_PASSWORD_HASH
+
+
 def authenticate_user(db: Session, data: UserLogin) -> tuple[User, str]:
     """Verifies user credentials and generates a signed JWT access token."""
     email = data.email.strip().lower()
     user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+    if not user:
+        verify_password(data.password, _dummy_hash())
         raise AuthenticationError("Invalid email or password.")
-    if not user.is_active:
-        raise AuthenticationError("User account is inactive.")
+    if not verify_password(data.password, user.hashed_password) or not user.is_active:
+        raise AuthenticationError("Invalid email or password.")
 
     token = create_access_token(subject=user.id)
     return user, token

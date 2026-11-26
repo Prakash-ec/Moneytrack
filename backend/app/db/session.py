@@ -12,12 +12,13 @@ from app.core.config import settings
 def _engine_kwargs(database_url: str) -> dict:
     if database_url.startswith("sqlite"):
         return {"connect_args": {"check_same_thread": False}}
-    # PostgreSQL pool settings optimized for Neon serverless & Render web services
+    # Conservative PostgreSQL pool settings for Neon serverless & Render free-tier web services
     return {
         "pool_pre_ping": True,
-        "pool_recycle": 300,
-        "pool_size": 10,
-        "max_overflow": 10,
+        "pool_recycle": 270,
+        "pool_size": 5,
+        "max_overflow": 5,
+        "pool_timeout": 30,
     }
 
 

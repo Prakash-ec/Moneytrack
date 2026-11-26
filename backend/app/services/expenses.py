@@ -138,15 +138,14 @@ def create_expense(
     duplicate.
     """
     if idempotency_key:
-        existing = (
-            db.execute(
-                select(ExpenseIdempotencyKey)
-                .options(joinedload(ExpenseIdempotencyKey.expense))
-                .where(ExpenseIdempotencyKey.idempotency_key == idempotency_key)
-            )
-            .scalars()
-            .first()
+        stmt = (
+            select(ExpenseIdempotencyKey)
+            .options(joinedload(ExpenseIdempotencyKey.expense))
+            .where(ExpenseIdempotencyKey.idempotency_key == idempotency_key)
         )
+        if user_id is not None:
+            stmt = stmt.where(ExpenseIdempotencyKey.user_id == user_id)
+        existing = db.execute(stmt).scalars().first()
         if existing is not None:
             loaded = get_expense(db, existing.expense_id, user_id=user_id)
             return ExpenseRead.model_validate(loaded), True
@@ -186,6 +185,7 @@ def create_expense(
         if idempotency_key:
             db.add(
                 ExpenseIdempotencyKey(
+                    user_id=user_id,
                     idempotency_key=idempotency_key,
                     expense_id=model.id,
                 )
@@ -194,26 +194,21 @@ def create_expense(
     except IntegrityError:
         db.rollback()
         if idempotency_key:
-            existing = (
-                db.execute(
-                    select(ExpenseIdempotencyKey).where(
-                        ExpenseIdempotencyKey.idempotency_key == idempotency_key
-                    )
-                )
-                .scalars()
-                .first()
+            stmt = select(ExpenseIdempotencyKey).where(
+                ExpenseIdempotencyKey.idempotency_key == idempotency_key
             )
+            if user_id is not None:
+                stmt = stmt.where(ExpenseIdempotencyKey.user_id == user_id)
+            existing = db.execute(stmt).scalars().first()
             if existing is not None:
                 loaded = get_expense(db, existing.expense_id, user_id=user_id)
                 return ExpenseRead.model_validate(loaded), True
         raise
 
     if effective_account_id:
-        try:
-            from app.services.bank_accounts import recalculate_account_balance
-            recalculate_account_balance(db, effective_account_id)
-        except Exception:
-            pass
+        from app.services.bank_accounts import recalculate_account_balance
+
+        recalculate_account_balance(db, effective_account_id)
 
     try:
         from app.services.security import evaluate_transaction_security

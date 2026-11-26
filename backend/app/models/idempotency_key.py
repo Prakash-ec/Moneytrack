@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utc_now
@@ -20,10 +20,16 @@ class ExpenseIdempotencyKey(Base):
     """
 
     __tablename__ = "expense_idempotency_keys"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_expense_idempotency_user_key"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     idempotency_key: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True, unique=True
+        String(255), nullable=False, index=True
     )
     expense_id: Mapped[int] = mapped_column(
         ForeignKey("expenses.id", ondelete="CASCADE"), nullable=False

@@ -43,7 +43,7 @@ export function useAndroidBackButton() {
           bubbles: true,
           cancelable: true,
         })
-        window.dispatchEvent(escapeEvent)
+        document.dispatchEvent(escapeEvent)
         return
       }
 

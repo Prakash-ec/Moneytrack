@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.account_transfer import AccountTransfer
@@ -115,12 +116,24 @@ def create_transfer(
         idempotency_key=idempotency_key,
     )
     db.add(transfer)
-    db.commit()
-    db.refresh(transfer)
-
-    # Update both accounts' calculated balances
-    recalculate_account_balance(db, payload.from_account_id)
-    recalculate_account_balance(db, payload.to_account_id)
+    try:
+        db.flush()
+        # Update both accounts' calculated balances atomically within the same transaction
+        recalculate_account_balance(db, payload.from_account_id, commit=False)
+        recalculate_account_balance(db, payload.to_account_id, commit=False)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if idempotency_key:
+            stmt = select(AccountTransfer).where(
+                AccountTransfer.idempotency_key == idempotency_key
+            )
+            if user_id is not None:
+                stmt = stmt.where(AccountTransfer.user_id == user_id)
+            existing = db.scalar(stmt)
+            if existing:
+                return existing, True
+        raise
 
     db.refresh(transfer)
     return transfer, False
@@ -162,13 +175,14 @@ def update_transfer(
             setattr(transfer, field, val)
 
     transfer.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    db.flush()
 
-    # Recalculate affected accounts
+    # Recalculate affected accounts atomically in the same transaction
     affected = {old_from_id, old_to_id, new_from_id, new_to_id}
     for acc_id in affected:
-        recalculate_account_balance(db, acc_id)
+        recalculate_account_balance(db, acc_id, commit=False)
 
+    db.commit()
     db.refresh(transfer)
     return transfer
 
@@ -186,8 +200,9 @@ def delete_transfer(
     to_id = transfer.to_account_id
 
     db.delete(transfer)
-    db.commit()
+    db.flush()
 
-    recalculate_account_balance(db, from_id)
-    recalculate_account_balance(db, to_id)
+    recalculate_account_balance(db, from_id, commit=False)
+    recalculate_account_balance(db, to_id, commit=False)
+    db.commit()
     return True

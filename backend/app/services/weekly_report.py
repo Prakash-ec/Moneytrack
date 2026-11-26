@@ -3,6 +3,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
+from app.core.time import today_ist
 from app.models.expense import Expense
 from app.models.expense_type import ExpenseType
 from app.models.income import Income
@@ -21,7 +22,7 @@ def get_previous_complete_week(ref_date: Optional[date] = None) -> tuple[date, d
     Returns the Monday-to-Sunday dates of the previous complete week.
     In Python, weekday() 0 is Monday and 6 is Sunday.
     """
-    today = ref_date or date.today()
+    today = ref_date or today_ist()
     current_weekday = today.weekday()  # Monday=0 ... Sunday=6
     # Monday of the current week is: today - timedelta(days=current_weekday)
     current_week_monday = today - timedelta(days=current_weekday)
@@ -46,7 +47,7 @@ def generate_weekly_report(
 
     # 1. Total Expenses for this period
     expense_query = db.query(Expense).filter(
-        Expense.expense_date >= start_str, Expense.expense_date <= end_str
+        Expense.expense_date >= start_date, Expense.expense_date <= end_date
     )
     if user_id is not None:
         expense_query = expense_query.filter(Expense.user_id == user_id)
@@ -56,7 +57,7 @@ def generate_weekly_report(
 
     # 2. Total Incomes for this period
     income_query = db.query(Income).filter(
-        Income.income_date >= start_str, Income.income_date <= end_str
+        Income.income_date >= start_date, Income.income_date <= end_date
     )
     if user_id is not None:
         income_query = income_query.filter(Income.user_id == user_id)
@@ -179,10 +180,13 @@ def generate_weekly_report(
         if e.account_id:
             aid = e.account_id
             if aid not in account_map:
-                acc = db.query(BankAccount).filter(BankAccount.id == aid).first()
+                acc_q = db.query(BankAccount).filter(BankAccount.id == aid)
+                if user_id is not None:
+                    acc_q = acc_q.filter(BankAccount.user_id == user_id)
+                acc = acc_q.first()
                 account_map[aid] = {
                     "account_id": aid,
-                    "name": acc.name if acc else "Bank",
+                    "name": acc.account_name if acc else "Bank",
                     "bank_name": acc.bank_name if acc else "",
                     "mask": acc.account_number_mask if acc else None,
                     "total_paise": 0,

@@ -3,7 +3,9 @@ package com.moneytrack.app.sms
 import android.content.Context
 import android.util.Log
 import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
@@ -38,7 +40,12 @@ class SyncWorker(context: Context, params: WorkerParameters) :
         }
 
         val queue = store.loadQueue()
-        val ready = queue.filter { it.status == CandidateStatus.READY_TO_SYNC }
+        val ready = queue.filter {
+            it.status == CandidateStatus.READY_TO_SYNC ||
+                (it.status == CandidateStatus.FAILED &&
+                    it.retryCount < 5 &&
+                    it.error?.contains("Authentication", ignoreCase = true) != true)
+        }
         if (ready.isEmpty()) return Result.success()
 
         val secureStore = SecureTokenStore(applicationContext)
@@ -56,12 +63,8 @@ class SyncWorker(context: Context, params: WorkerParameters) :
             return Result.success()
         }
 
-        // Fetch active expense types dynamically from backend
+        // Fetch active expense types dynamically for legacy /expenses DEBIT fallback if needed
         val activeTypes = fetchActiveExpenseTypes(backendUrl, authToken)
-        if (activeTypes.isEmpty()) {
-            Log.w(TAG, "No active expense types available from backend; will retry.")
-            return Result.retry()
-        }
 
         var allOk = true
         for (record in ready) {
@@ -103,7 +106,11 @@ class SyncWorker(context: Context, params: WorkerParameters) :
 
     private fun enqueueRetry(context: Context, delaySeconds: Long) {
         val workManager = WorkManager.getInstance(context)
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(constraints)
             .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
@@ -344,7 +351,20 @@ class SyncWorker(context: Context, params: WorkerParameters) :
                 return ingestResult
             }
 
-            // Fallback to traditional /api/expenses endpoint
+            // Never fall back to /api/expenses for CREDIT, TRANSFER, or UNKNOWN directions
+            if (record.parsed.status != TxnStatus.DEBIT) {
+                return SyncResult(
+                    created = false,
+                    replayed = false,
+                    expenseId = null,
+                    error = "SMS ingest endpoint required for ${record.parsed.status} transactions",
+                )
+            }
+            if (activeTypes.isEmpty()) {
+                return SyncResult(false, false, null, "No active expense types available")
+            }
+
+            // Fallback to traditional /api/expenses endpoint only when legacy backend lacks /sms/ingest
             return createExpense(backendUrl, record, activeTypes, authToken)
         }
 
@@ -357,9 +377,13 @@ class SyncWorker(context: Context, params: WorkerParameters) :
             authToken: String? = null
         ): SyncResult? {
             val parsed = record.parsed
-            val amount = parsed.amountPaise ?: return null
+            val amount = parsed.amountPaise ?: return SyncResult(false, false, null, "Missing amount")
             val url = buildEndpointUrl(backendUrl, "sms/ingest")
-            val direction = if (parsed.status == TxnStatus.CREDIT) "CREDIT" else "DEBIT"
+            val direction = when (parsed.status) {
+                TxnStatus.CREDIT -> "CREDIT"
+                TxnStatus.DEBIT -> "DEBIT"
+                else -> "UNKNOWN"
+            }
             val expenseDate = parsed.transactionDate ?: toIsoDate(parsed.timestampMs ?: System.currentTimeMillis())
 
             var connection: HttpURLConnection? = null
@@ -405,10 +429,15 @@ class SyncWorker(context: Context, params: WorkerParameters) :
 
                 if (code in 200 until 300) {
                     val resp = connection.inputStream.use { it.readBytes() }.toString(Charsets.UTF_8)
-                    val idMatch = Regex("""(?i)"(?:entity_)?id"\s*:\s*(\d+)""").find(resp)
-                    val entityId = idMatch?.groupValues?.get(1)?.toIntOrNull()
-                    val isCreated = resp.contains(""""status":"created"""") || resp.contains(""""created":\s*true""") || resp.contains(""""created":true""")
-                    val isReplayed = resp.contains(""""status":"replayed"""") || resp.contains(""""replayed":\s*true""") || resp.contains(""""replayed":true""")
+                    val json = runCatching { JSONObject(resp) }.getOrNull()
+                    val entityId = json?.optInt("entity_id", -1)?.takeIf { it > 0 }
+                        ?: json?.optInt("id", -1)?.takeIf { it > 0 }
+                    val respStatus = json?.optString("status", "") ?: ""
+                    val isCreated = json?.optBoolean("created", false) == true || respStatus == "created"
+                    val isReplayed = json?.optBoolean("replayed", false) == true ||
+                        respStatus == "replayed" ||
+                        respStatus == "matched_manual" ||
+                        respStatus == "queued"
                     SyncResult(
                         created = isCreated,
                         replayed = isReplayed,
@@ -422,8 +451,8 @@ class SyncWorker(context: Context, params: WorkerParameters) :
                     SyncResult(false, false, null, "HTTP $code: ${err ?: "Request failed"}")
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Ingest failed; will retry or fall back", e)
-                null
+                Log.w(TAG, "Ingest network/IO failure; preserving for retry", e)
+                SyncResult(false, false, null, e.message ?: "Network error")
             } finally {
                 connection?.disconnect()
             }

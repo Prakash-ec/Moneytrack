@@ -30,6 +30,17 @@ def _paise_to_rupees(amount_paise: int) -> str:
     return f"{whole}.{fraction:02d}"
 
 
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: Any) -> str:
+    """Neutralize spreadsheet formula injection payloads in CSV text cells."""
+    text = "" if value is None else str(value)
+    if text and text[0] in _CSV_FORMULA_PREFIXES:
+        return f"'{text}"
+    return text
+
+
 def _expenses(
     db: Session,
     start: date | None = None,
@@ -96,14 +107,14 @@ def expenses_csv(
         writer.writerow(
             [
                 expense.expense_date.isoformat(),
-                expense.expense_type.name,
-                expense.expense_type.category or "",
+                _csv_safe(expense.expense_type.name),
+                _csv_safe(expense.expense_type.category or ""),
                 _paise_to_rupees(expense.amount_paise),
                 expense.amount_paise,
-                expense.payment_method or "",
-                acc_label,
-                expense.merchant or "",
-                expense.note or "",
+                _csv_safe(expense.payment_method or ""),
+                _csv_safe(acc_label),
+                _csv_safe(expense.merchant or ""),
+                _csv_safe(expense.note or ""),
                 expense.created_at.isoformat(),
                 expense.updated_at.isoformat(),
             ]
@@ -408,8 +419,17 @@ def restore_json(
         # ------------------------------------------------------------- #
         # 1. Restore & Map Expense Types
         # ------------------------------------------------------------- #
-        existing_types = list(db.scalars(select(ExpenseType)).all())
-        existing_type_by_key = {t.name_key: t for t in existing_types}
+        type_stmt = select(ExpenseType).order_by(ExpenseType.id.asc())
+        if user_id is not None:
+            type_stmt = type_stmt.where(
+                (ExpenseType.user_id == user_id) | (ExpenseType.user_id.is_(None))
+            )
+        existing_types = list(db.scalars(type_stmt).all())
+        existing_type_by_key: dict[str, ExpenseType] = {}
+        for t in existing_types:
+            # Prefer tenant-owned type over system default on same key
+            if t.name_key not in existing_type_by_key or t.user_id is not None:
+                existing_type_by_key[t.name_key] = t
         type_id_map: dict[int, int] = {}
 
         for item in types_data:
@@ -505,8 +525,16 @@ def restore_json(
         # ------------------------------------------------------------- #
         income_type_id_map: dict[int, int] = {}
         if schema_version >= 2 and "income_types" in payload:
-            existing_income_types = list(db.scalars(select(IncomeType)).all())
-            existing_it_by_key = {it.name_key: it for it in existing_income_types}
+            it_stmt = select(IncomeType).order_by(IncomeType.id.asc())
+            if user_id is not None:
+                it_stmt = it_stmt.where(
+                    (IncomeType.user_id == user_id) | (IncomeType.user_id.is_(None))
+                )
+            existing_income_types = list(db.scalars(it_stmt).all())
+            existing_it_by_key: dict[str, IncomeType] = {}
+            for it in existing_income_types:
+                if it.name_key not in existing_it_by_key or it.user_id is not None:
+                    existing_it_by_key[it.name_key] = it
 
             for item in payload.get("income_types", []):
                 if not isinstance(item, dict):
@@ -678,6 +706,20 @@ def restore_json(
         # 6. Restore Transfers (v2 only)
         # ------------------------------------------------------------- #
         if schema_version >= 2 and "transfers" in payload:
+            tr_stmt = select(AccountTransfer)
+            if user_id is not None:
+                tr_stmt = tr_stmt.where(AccountTransfer.user_id == user_id)
+            existing_transfers = list(db.scalars(tr_stmt).all())
+            existing_transfer_sigs = {
+                (
+                    t.from_account_id,
+                    t.to_account_id,
+                    t.amount_paise,
+                    t.transfer_date,
+                    (t.bank_reference or "").strip(),
+                )
+                for t in existing_transfers
+            }
             for tr_data in payload.get("transfers", []):
                 if not isinstance(tr_data, dict):
                     continue
@@ -698,6 +740,11 @@ def restore_json(
                 except ValueError:
                     continue
 
+                tr_ref = (tr_data.get("bank_reference") or "").strip() or None
+                tr_sig = (t_from, t_to, amt, tr_date, tr_ref or "")
+                if tr_sig in existing_transfer_sigs:
+                    continue
+
                 new_transfer = AccountTransfer(
                     user_id=user_id,
                     from_account_id=t_from,
@@ -705,9 +752,10 @@ def restore_json(
                     amount_paise=amt,
                     transfer_date=tr_date,
                     description=tr_data.get("description"),
-                    bank_reference=tr_data.get("bank_reference"),
+                    bank_reference=tr_ref,
                 )
                 db.add(new_transfer)
+                existing_transfer_sigs.add(tr_sig)
                 restored_transfers_count += 1
 
         # ------------------------------------------------------------- #

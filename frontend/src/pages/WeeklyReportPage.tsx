@@ -70,6 +70,12 @@ export function WeeklyReportPage({ embedded = false }: { embedded?: boolean } = 
   }
 
   useEffect(() => {
+    if (!embedded) {
+      document.title = 'Weekly spending report · MoneyTrack'
+    }
+  }, [embedded])
+
+  useEffect(() => {
     loadReport()
   }, [weekOffset])
 

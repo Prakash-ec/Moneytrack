@@ -18,17 +18,21 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Create data directory for SQLite database
-RUN mkdir -p /app/data
+# Create non-root user and data directory
+RUN addgroup --system appuser && \
+    adduser --system --ingroup appuser appuser && \
+    mkdir -p /app/data
 
 # Copy backend application code
-COPY . .
+COPY --chown=appuser:appuser . .
+RUN chown -R appuser:appuser /app/data
 
-# Set default environment variables
+# Set safe default runtime environment variables
 ENV PORT=8000
 ENV DATABASE_URL=sqlite:////app/data/moneytrack.db
-ENV CORS_ORIGINS=*
 ENV SERVE_FRONTEND=false
+
+USER appuser
 
 EXPOSE 8000
 

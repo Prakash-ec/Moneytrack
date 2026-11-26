@@ -283,11 +283,12 @@ def list_accounts(
 
     # Pure read operation: balances are maintained at transaction mutation time
     total_balance = sum(acc.current_balance_paise for acc in items if not acc.is_archived)
-    total_reported = sum(
+    reported_values = [
         acc.last_reported_balance_paise
         for acc in items
         if not acc.is_archived and acc.last_reported_balance_paise is not None
-    )
+    ]
+    total_reported = sum(reported_values) if reported_values else None
     discrepancy_count = sum(
         1 for acc in items if not acc.is_archived and acc.reconciliation_status == "discrepancy"
     )
@@ -295,7 +296,7 @@ def list_accounts(
     return BankAccountList(
         items=[BankAccountRead.model_validate(acc) for acc in items],
         total_balance_paise=total_balance,
-        total_reported_balance_paise=total_reported if total_reported > 0 else None,
+        total_reported_balance_paise=total_reported,
         account_count=len([acc for acc in items if not acc.is_archived]),
         reconciliation_needed_count=discrepancy_count,
     )

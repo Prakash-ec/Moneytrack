@@ -228,7 +228,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
             })
           )
         }
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt))
+        const backoffMs = isTest
+          ? retryDelayMs * attempt
+          : Math.min(10000, retryDelayMs * 2 ** (attempt - 1))
+        await new Promise((resolve) => setTimeout(resolve, backoffMs))
         continue
       }
 
@@ -271,7 +274,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
           })
         )
       }
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt))
+      const backoffMs = isTest
+        ? retryDelayMs * attempt
+        : Math.min(10000, retryDelayMs * 2 ** (attempt - 1))
+      await new Promise((resolve) => setTimeout(resolve, backoffMs))
       continue
     }
 

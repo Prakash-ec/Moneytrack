@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.time import today_ist
 from app.models.bank_account import BankAccount
 from app.models.expense import Expense
 from app.models.expense_type import ExpenseType
@@ -187,12 +188,12 @@ def ingest_sms_transaction(
         )
 
     # Parse transaction date and timestamps
-    txn_date = date.today()
+    txn_date = today_ist()
     if payload.transaction_date:
         try:
             txn_date = date.fromisoformat(payload.transaction_date)
         except ValueError:
-            txn_date = date.today()
+            txn_date = today_ist()
 
     txn_time: datetime | None = None
     if payload.transaction_time:
@@ -285,14 +286,15 @@ def ingest_sms_transaction(
     # --- LAYER 1A: Idempotency Key Check ---
     if effective_key:
         if direction == "DEBIT":
-            existing_key = db.scalar(
-                select(ExpenseIdempotencyKey).where(
-                    ExpenseIdempotencyKey.idempotency_key == effective_key
-                )
+            key_stmt = select(ExpenseIdempotencyKey).where(
+                ExpenseIdempotencyKey.idempotency_key == effective_key
             )
+            if user_id is not None:
+                key_stmt = key_stmt.where(ExpenseIdempotencyKey.user_id == user_id)
+            existing_key = db.scalar(key_stmt)
             if existing_key:
                 exp = db.get(Expense, existing_key.expense_id)
-                if exp:
+                if exp and (user_id is None or exp.user_id == user_id):
                     return SmsIngestResponse(
                         created=False,
                         replayed=True,
@@ -569,7 +571,7 @@ def ingest_sms_transaction(
                 if (
                     account
                     and payload.available_balance_paise is not None
-                    and payload.available_balance_paise > 0
+                    and payload.available_balance_paise >= 0
                 ):
                     record_reported_balance(
                         db,
@@ -634,7 +636,7 @@ def ingest_sms_transaction(
                 if (
                     account
                     and payload.available_balance_paise is not None
-                    and payload.available_balance_paise > 0
+                    and payload.available_balance_paise >= 0
                 ):
                     record_reported_balance(
                         db,
@@ -710,7 +712,7 @@ def ingest_sms_transaction(
                         ex.bank_reference = clean_ref
                     if (
                         payload.available_balance_paise is not None
-                        and payload.available_balance_paise > 0
+                        and payload.available_balance_paise >= 0
                     ):
                         record_reported_balance(
                             db,
@@ -777,7 +779,7 @@ def ingest_sms_transaction(
                         inc.bank_reference = clean_ref
                     if (
                         payload.available_balance_paise is not None
-                        and payload.available_balance_paise > 0
+                        and payload.available_balance_paise >= 0
                     ):
                         record_reported_balance(
                             db,
@@ -926,7 +928,7 @@ def ingest_sms_transaction(
         if (
             account
             and payload.available_balance_paise is not None
-            and payload.available_balance_paise > 0
+            and payload.available_balance_paise >= 0
         ):
             record_reported_balance(
                 db,
@@ -1069,7 +1071,7 @@ def ingest_sms_transaction(
         if (
             account
             and payload.available_balance_paise is not None
-            and payload.available_balance_paise > 0
+            and payload.available_balance_paise >= 0
         ):
             record_reported_balance(
                 db,

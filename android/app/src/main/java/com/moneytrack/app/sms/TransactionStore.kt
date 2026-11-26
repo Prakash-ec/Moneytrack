@@ -2,8 +2,6 @@ package com.moneytrack.app.sms
 
 import android.content.Context
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -36,7 +34,7 @@ class TransactionStore(private val storageDir: File) {
         }
     }
 
-    fun upsert(record: TransactionRecord): TransactionRecord {
+    fun upsert(record: TransactionRecord, forceUserEdit: Boolean = false): TransactionRecord {
         synchronized(queueLock) {
             val current = readQueue(queueFile()).toMutableList()
             val existingIndex = current.indexOfFirst { it.id == record.id }
@@ -44,10 +42,15 @@ class TransactionStore(private val storageDir: File) {
             // If updating an already stored record by exact ID, merge evidence and state safely:
             // 1. Preserve higher status (never downgrade READY_TO_SYNC or SYNCED to PENDING_REVIEW)
             // 2. Preserve notification ID so it is never lost or wiped to null
-            // 3. Merge parsed metadata so stronger evidence is never downgraded
+            // 3. Merge parsed metadata (unless explicit user edit overrides parsed fields)
             if (existingIndex >= 0) {
                 val existing = current[existingIndex]
-                val merged = SmsReconciliation.mergeRecords(existing, record, "Updated record ${record.id}").copy(
+                val baseRecord = if (forceUserEdit) {
+                    record
+                } else {
+                    SmsReconciliation.mergeRecords(existing, record, "Updated record ${record.id}")
+                }
+                val merged = baseRecord.copy(
                     status = if (record.status == CandidateStatus.IGNORED || record.status == CandidateStatus.READY_TO_SYNC || record.status == CandidateStatus.SYNCED) {
                         record.status
                     } else if (existing.status == CandidateStatus.READY_TO_SYNC || existing.status == CandidateStatus.SYNCED) {
@@ -58,7 +61,7 @@ class TransactionStore(private val storageDir: File) {
                     notificationId = record.notificationId ?: existing.notificationId,
                     notified = record.notified || existing.notified,
                     syncedAtMs = record.syncedAtMs ?: existing.syncedAtMs,
-                    error = record.error ?: existing.error
+                    error = if (forceUserEdit) record.error else (record.error ?: existing.error)
                 )
                 current[existingIndex] = merged
                 writeQueue(queueFile(), current)
@@ -270,13 +273,25 @@ class TransactionStore(private val storageDir: File) {
         return (0 until arr.length()).map { arr.getJSONObject(it) }.mapNotNull { recordFromJson(it) }
     }
 
+    private fun replaceFileSafely(tmp: File, target: File) {
+        if (tmp.renameTo(target)) return
+        // Android API 24-25 safe atomic-style replacement when renameTo cannot overwrite existing target
+        if (target.exists()) {
+            target.delete()
+        }
+        if (!tmp.renameTo(target)) {
+            tmp.copyTo(target, overwrite = true)
+            tmp.delete()
+        }
+    }
+
     private fun writeQueue(file: File, records: List<TransactionRecord>) {
         val tmp = File(file.parentFile, "${file.name}.tmp")
         val arr = JSONArray()
         records.forEach { arr.put(recordToJson(it)) }
         val obj = JSONObject().put("records", arr)
         tmp.bufferedWriter().use { it.write(obj.toString()) }
-        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        replaceFileSafely(tmp, file)
     }
 
     private fun readSettings(file: File): SmsSettings {
@@ -296,7 +311,7 @@ class TransactionStore(private val storageDir: File) {
         obj.put("backendUrl", settings.backendUrl ?: JSONObject.NULL)
         obj.put("notificationsEnabled", settings.notificationsEnabled)
         tmp.bufferedWriter().use { it.write(obj.toString()) }
-        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        replaceFileSafely(tmp, file)
     }
 
     companion object {

@@ -10,9 +10,15 @@ object SmsEligibility {
         "otp", "one time password", "verification code", "verify", "verifying",
         "authenticate", "login code", "your otp is"
     )
-    private val PROMO_KEYWORDS = listOf(
-        "promo", "promotion", "offer", "discount", "cashback offer", "lucky", "winner", "won",
-        "click here", "unsubscribe", "advertisement", "market", "reward", "scratch",
+    private val HARD_PROMO_KEYWORDS = listOf(
+        "promo", "promotion", "lucky", "winner",
+        "click here", "unsubscribe", "advertisement", "scratch",
+    )
+    private val SOFT_PROMO_KEYWORDS = listOf(
+        "offer", "discount", "cashback offer", "won", "market", "reward",
+    )
+    private val BANK_CONFIRMATION_HINTS = listOf(
+        "debited", "credited", "withdrawn", "deposited", "spent on", "paid via", "avail bal", "available bal", "a/c", "acct"
     )
     private val BALANCE_ONLY_HINTS = listOf("balance", "avail bal", "available bal", "ac bal", "current balance")
 
@@ -35,7 +41,10 @@ object SmsEligibility {
         if (parsed.classification == FinancialTxnType.OTP || OTP_KEYWORDS.any { text.contains(it) }) {
             return Decision(CandidateStatus.IGNORED, "OTP or verification message")
         }
-        if (parsed.classification == FinancialTxnType.PROMOTIONAL_SMS || PROMO_KEYWORDS.any { text.contains(it) }) {
+        val hasHardPromo = HARD_PROMO_KEYWORDS.any { text.contains(it) }
+        val hasSoftPromoOnly = SOFT_PROMO_KEYWORDS.any { text.contains(it) } &&
+            !(BANK_CONFIRMATION_HINTS.any { text.contains(it) } && (parsed.status == TxnStatus.DEBIT || parsed.status == TxnStatus.CREDIT))
+        if (parsed.classification == FinancialTxnType.PROMOTIONAL_SMS || hasHardPromo || hasSoftPromoOnly) {
             return Decision(CandidateStatus.IGNORED, "Promotional or marketing message")
         }
         if (parsed.classification == FinancialTxnType.NON_FINANCIAL_SMS) {

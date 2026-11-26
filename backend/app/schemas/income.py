@@ -58,4 +58,5 @@ class IncomeList(BaseModel):
     page: int
     page_size: int
     pages: int
+    total_paise: int = 0
     total_paise: int

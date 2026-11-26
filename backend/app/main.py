@@ -192,6 +192,19 @@ async def lifespan(app: FastAPI):
         attach_profiling_listeners(engine, settings.slow_query_threshold_ms)
         logger.info("SQL query profiling activated (threshold: %.1f ms)", settings.slow_query_threshold_ms)
 
+    from app.db.session import _engine_kwargs
+
+    pool_cfg = _engine_kwargs(settings.sqlalchemy_database_url)
+    logger.info(
+        "Database config initialized: provider=%s dialect=%s keep_alive_enabled=%s pool_size=%s max_overflow=%s pool_recycle=%s",
+        settings.database_provider,
+        settings.database_dialect,
+        settings.keep_alive_enabled,
+        pool_cfg.get("pool_size"),
+        pool_cfg.get("max_overflow"),
+        pool_cfg.get("pool_recycle"),
+    )
+
     keep_alive_task = None
     is_test = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST")
     if settings.keep_alive_enabled and not is_test:
@@ -207,6 +220,8 @@ async def lifespan(app: FastAPI):
                 target,
                 settings.keep_alive_interval_minutes,
             )
+    else:
+        logger.info("Keep-alive background pinger disabled (serverless database auto-suspend preserved).")
 
     yield
 
@@ -314,44 +329,20 @@ app.include_router(api_router, prefix=settings.api_prefix)
 
 
 @app.get("/health", include_in_schema=False)
+@app.get("/health/live", include_in_schema=False)
 def root_health():
-    """Root health endpoint for Render health checks, load balancers, and monitoring."""
-    db_status = "connected"
-    schema_status = "ready"
-    current_rev = None
-    try:
-        from app.db.session import SessionLocal
+    """Pure HTTP liveness endpoint for Render health checks and load balancers.
 
-        with SessionLocal() as session:
-            session.execute(text("SELECT 1"))
-            try:
-                rev_row = session.execute(text("SELECT version_num FROM alembic_version")).first()
-                current_rev = rev_row[0] if rev_row else None
-            except Exception:
-                current_rev = None
-            session.execute(text("SELECT 1 FROM expense_types LIMIT 1"))
-    except Exception as exc:
-        err_msg = str(exc).lower()
-        if "no such table" in err_msg or "does not exist" in err_msg or "undefined_table" in err_msg:
-            db_status = "connected"
-            schema_status = "degraded"
-        else:
-            db_status = "unavailable"
-            schema_status = "unavailable"
-
-    dialect = settings.database_dialect
-    provider = settings.database_provider
-    is_ok = db_status == "connected" and schema_status == "ready"
+    Deliberately avoids executing database queries so platform health probes
+    never wake serverless PostgreSQL (e.g. Neon) from idle suspension.
+    Use /health/db or /api/health/db for explicit database readiness verification.
+    """
     return {
-        "status": "ok" if is_ok else "degraded",
+        "status": "ok",
         "application": settings.app_name,
         "version": settings.app_version,
         "environment": settings.environment,
-        "database": db_status,
-        "provider": provider,
-        "dialect": dialect,
-        "schema_status": schema_status,
-        "current_revision": current_rev,
+        "check": "liveness",
     }
 
 

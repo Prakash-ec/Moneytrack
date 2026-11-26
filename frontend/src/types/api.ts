@@ -395,7 +395,9 @@ export interface IncomeCreateInput {
 
 export type IncomeUpdateInput = Partial<IncomeCreateInput>
 
-export type IncomePage = Page<Income>
+export type IncomePage = Page<Income> & {
+  total_paise?: number
+}
 
 export interface AccountTransfer {
   id: number
@@ -490,13 +492,14 @@ export interface BankHelplineInfo {
 }
 
 export interface SecurityActionResponse {
-  alert_id: number
+  alert_id?: number
   status: string
   success: boolean
   message: string
-  fraud_guidance?: string[] | null
+  fraud_guidance?: Array<string | BankHelplineInfo> | null
   bank_helplines?: BankHelplineInfo[] | null
   cybercrime_helpline?: string | null
+  cybercrime_portal?: string | null
   cybercrime_url?: string | null
 }
 

@@ -80,14 +80,14 @@ class SmsReceiver : BroadcastReceiver() {
                 reason = decision.reason, createdAtMs = now,
             )
             CandidateStatus.PENDING_REVIEW -> {
-                val notify = existing == null || !existing.notified
+                val alreadyNotified = existing?.notified == true
                 TransactionRecord(
                     id = id,
                     status = CandidateStatus.PENDING_REVIEW,
                     parsed = parsed,
                     reason = decision.reason,
                     createdAtMs = existing?.createdAtMs ?: now,
-                    notified = existing?.notified ?: notify,
+                    notified = alreadyNotified,
                     notificationId = existing?.notificationId,
                 )
             }

@@ -74,3 +74,50 @@ def test_openapi_schema_is_available(client):
     assert "/api/expenses" in paths
     assert "/api/analytics/summary" in paths
     assert "/api/health/db" in paths
+    assert "/api/health/live" in paths
+
+
+def test_keep_alive_disabled_by_default(monkeypatch):
+    """Ensure no background keep-alive task is enabled by default."""
+    monkeypatch.delenv("KEEP_ALIVE_ENABLED", raising=False)
+    s = Settings()
+    assert s.keep_alive_enabled is False
+
+
+def test_liveness_endpoints_execute_zero_database_queries(client, monkeypatch):
+    """Ensure /health, /health/live, and /api/health/live never query the database."""
+    import app.db.session as session_mod
+
+    def fail_if_db_touched():
+        raise AssertionError("Liveness endpoint must not open a database session")
+
+    monkeypatch.setattr(session_mod, "SessionLocal", fail_if_db_touched)
+
+    for path in ("/health", "/health/live", "/api/health/live"):
+        res = client.get(path)
+        assert res.status_code == 200
+        body = res.json()
+        assert body["status"] == "ok"
+        assert body["check"] == "liveness"
+
+
+def test_postgresql_pool_kwargs_conservative_for_serverless():
+    from app.db.session import _engine_kwargs
+
+    kwargs = _engine_kwargs("postgresql+psycopg2://user:pass@host/db?sslmode=require")
+    assert kwargs["pool_pre_ping"] is True
+    assert kwargs["pool_size"] <= 5
+    assert kwargs["max_overflow"] <= 5
+    assert 0 < kwargs["pool_recycle"] < 300
+    assert kwargs["pool_timeout"] == 30
+
+
+def test_no_cron_keep_alive_workflow_present():
+    from pathlib import Path
+
+    workflows_dir = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+    assert not (workflows_dir / "keep_alive.yml").exists()
+    for wf in workflows_dir.glob("*.y*ml"):
+        content = wf.read_text(encoding="utf-8")
+        assert "schedule:" not in content
+        assert "*/12 * * * *" not in content

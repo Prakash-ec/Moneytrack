@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import com.getcapacitor.BridgeActivity
+import com.moneytrack.app.BuildConfig
 import com.moneytrack.app.plugins.SmsPlugin
 import com.moneytrack.app.sms.CandidateStatus
 import com.moneytrack.app.sms.ParsedTransaction
@@ -38,14 +39,15 @@ class MainActivity : BridgeActivity() {
             plugin?.handleDeepLink(uriString)
         }
 
-        if (intent.action == "com.moneytrack.app.TEST_NOTIFICATION") {
+        if (BuildConfig.DEBUG && intent.action == "com.moneytrack.app.TEST_NOTIFICATION") {
             handleTestNotificationAction(intent)
         }
     }
 
     private fun handleTestNotificationAction(intent: Intent) {
+        if (!BuildConfig.DEBUG) return
         val actionType = intent.getStringExtra("test_action") ?: return
-        android.util.Log.i("MoneyTrackTest", "handleTestNotificationAction actionType=$actionType, extras=${intent.extras}")
+        android.util.Log.i("MoneyTrackTest", "handleTestNotificationAction actionType=$actionType")
         val store = TransactionStore(this)
 
         when (actionType) {

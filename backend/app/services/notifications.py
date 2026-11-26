@@ -116,7 +116,20 @@ def update_preferences(
     if user_id is not None:
         query = query.filter(UserPreference.user_id == user_id)
     row = query.first()
-    json_val = prefs.model_dump_json()
+
+    existing_data: dict[str, object] = {}
+    if row and row.value:
+        try:
+            loaded = json.loads(row.value)
+            if isinstance(loaded, dict):
+                existing_data = loaded
+        except Exception:
+            existing_data = {}
+
+    merged_data = {**existing_data, **prefs.model_dump(exclude_unset=True)}
+    merged_prefs = NotificationPreferences(**merged_data)
+    json_val = merged_prefs.model_dump_json()
+
     if not row:
         row = UserPreference(user_id=user_id, key=PREFS_KEY, value=json_val)
         db.add(row)
@@ -124,4 +137,4 @@ def update_preferences(
         row.value = json_val
     db.commit()
     db.refresh(row)
-    return prefs
+    return merged_prefs

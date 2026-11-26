@@ -27,14 +27,17 @@ import { useToast } from '@/providers/ToastProvider'
 import { api } from '@/services/api'
 import { SmsPlugin, type PendingTransaction, type SmsSettings } from '@/services/sms'
 import type { ExpenseType } from '@/types/api'
+import { parseRupeesToPaise } from '@/utils/currency'
 import { formatDate } from '@/utils/dates'
 
 function isCreditItem(item: { direction?: string | null; classification?: string | null; reason?: string; note?: string; category?: string }): boolean {
+  if (item.direction === 'CREDIT' || item.classification === 'BANK_CREDIT') return true
+  if (item.direction === 'DEBIT') return false
+  const noteLower = (item.note ?? '').toLowerCase()
+  if (noteLower.includes('credit card')) return false
   return (
-    item.direction === 'CREDIT' ||
-    item.classification === 'BANK_CREDIT' ||
-    item.reason?.toLowerCase().includes('credit') === true ||
-    item.note?.toLowerCase().includes('credit') === true ||
+    item.reason?.toLowerCase().includes('credited') === true ||
+    noteLower.includes('credited') ||
     item.category?.toLowerCase() === 'salary' ||
     item.category?.toLowerCase() === 'income'
   )
@@ -136,13 +139,24 @@ export function SmsReviewPage() {
         } else {
           const item = items.find((i) => i.id === id)
           if (item && item.amount) {
-            const paise = Math.round(parseFloat(item.amount) * 100)
+            const paise = parseRupeesToPaise(item.amount)
+            if (!paise || paise <= 0) {
+              throw new Error('Enter a valid positive amount before confirming.')
+            }
             const isCredit = isCreditItem(item)
+            const explicitDirection =
+              item.direction === 'CREDIT' || item.direction === 'DEBIT'
+                ? item.direction
+                : isCredit
+                  ? 'CREDIT'
+                  : item.classification === 'AMBIGUOUS_REVIEW' || item.direction === 'UNKNOWN'
+                    ? 'UNKNOWN'
+                    : 'DEBIT'
 
             await api.ingestSms(
               {
                 amount_paise: paise,
-                direction: isCredit ? 'CREDIT' : 'DEBIT',
+                direction: explicitDirection,
                 reference: item.reference,
                 transaction_date: item.date,
                 merchant_or_payer: item.merchant,

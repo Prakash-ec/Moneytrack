@@ -257,7 +257,7 @@ class SmsPlugin : Plugin() {
             status = CandidateStatus.READY_TO_SYNC,
             reason = "Updated by user",
         )
-        store.upsert(updated)
+        store.upsert(updated, forceUserEdit = true)
         enqueueSync(ctx)
         call.resolve(recordToJson(updated))
     }

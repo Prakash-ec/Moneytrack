@@ -17,6 +17,7 @@ import { Field, Input } from '@/components/ui/FormControls'
 import { Modal } from '@/components/ui/Modal'
 import { Panel } from '@/components/ui/Panel'
 import { CardSkeleton, EmptyState, ErrorState } from '@/components/ui/States'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useToast } from '@/providers/ToastProvider'
 import { api, ApiError } from '@/services/api'
 import {
@@ -67,6 +68,7 @@ function ToggleRow({
 }
 
 export default function NotificationsPage() {
+  useDocumentTitle('Notifications')
   const { showToast } = useToast()
   const [data, setData] = useState<NotificationCenterSummary | null>(null)
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null)
@@ -116,10 +118,12 @@ export default function NotificationsPage() {
       setData((prev) => {
         if (!prev) return prev
         return {
+          ...prev,
           unread_count: Math.max(0, prev.unread_count - 1),
           items: prev.items.map((item) => (item.id === id ? { ...item, is_read: true } : item)),
         }
       })
+      window.dispatchEvent(new CustomEvent('moneytrack:notifications-changed'))
     } catch {
       // Marking a single notification read is best-effort.
     }
@@ -131,10 +135,12 @@ export default function NotificationsPage() {
       setData((prev) => {
         if (!prev) return prev
         return {
+          ...prev,
           unread_count: 0,
           items: prev.items.map((item) => ({ ...item, is_read: true })),
         }
       })
+      window.dispatchEvent(new CustomEvent('moneytrack:notifications-changed'))
     } catch {
       // Best-effort.
     }
@@ -404,8 +410,24 @@ export default function NotificationsPage() {
                 min="1"
                 max="10"
                 value={prefs.max_alerts_per_day}
-                onChange={(event) =>
-                  handleSavePreferences({ max_alerts_per_day: Number.parseInt(event.target.value) })
+                onChange={(event) => {
+                  const next = Number.parseInt(event.target.value, 10)
+                  setPrefs((prev) => (prev ? { ...prev, max_alerts_per_day: next } : prev))
+                }}
+                onMouseUp={(event) =>
+                  handleSavePreferences({
+                    max_alerts_per_day: Number.parseInt(event.currentTarget.value, 10),
+                  })
+                }
+                onTouchEnd={(event) =>
+                  handleSavePreferences({
+                    max_alerts_per_day: Number.parseInt(event.currentTarget.value, 10),
+                  })
+                }
+                onBlur={(event) =>
+                  handleSavePreferences({
+                    max_alerts_per_day: Number.parseInt(event.currentTarget.value, 10),
+                  })
                 }
                 className="mt-3 w-full cursor-pointer accent-primary"
                 aria-label="Maximum push alerts per day"

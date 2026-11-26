@@ -319,13 +319,13 @@ export function SettingsPage() {
         const content = JSON.parse(e.target?.result as string)
         if (
           !content ||
-          content.schema_version !== 1 ||
+          (content.schema_version !== 1 && content.schema_version !== 2) ||
           !Array.isArray(content.expense_types) ||
           !Array.isArray(content.expenses)
         ) {
           showToast({
             title: 'Invalid backup file',
-            description: 'The file is not a valid MoneyTrack version 1 JSON backup.',
+            description: 'The file is not a valid MoneyTrack v1 or v2 JSON backup.',
             variant: 'error',
           })
           if (fileInputRef.current) fileInputRef.current.value = ''
@@ -525,7 +525,7 @@ export function SettingsPage() {
                 <h3>API connection</h3>
                 <p>
                   {online && healthQuery.data?.status === 'ok'
-                    ? `Connected to local server (${getApiBase()})`
+                    ? `Connected to server (${getApiBase()})`
                     : 'Check your backend URL and status'}
                 </p>
               </div>

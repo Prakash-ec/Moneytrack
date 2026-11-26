@@ -58,7 +58,7 @@ def create_income_type(
         )
     )
     if existing:
-        if existing.is_archived:
+        if existing.is_archived and existing.user_id == current_user.id:
             existing.is_archived = False
             existing.description = payload.description
             existing.category = payload.category
@@ -96,7 +96,9 @@ def update_income_type(
     model = db.get(IncomeType, type_id)
     if not model:
         raise HTTPException(status_code=404, detail="Income type not found")
-    if model.user_id is not None and model.user_id != current_user.id:
+    if model.user_id is None:
+        raise HTTPException(status_code=403, detail="System default income types cannot be modified")
+    if model.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Income type not found")
 
     data = payload.model_dump(exclude_unset=True)
@@ -117,7 +119,9 @@ def delete_income_type(
     model = db.get(IncomeType, type_id)
     if not model:
         raise HTTPException(status_code=404, detail="Income type not found")
-    if model.user_id is not None and model.user_id != current_user.id:
+    if model.user_id is None:
+        raise HTTPException(status_code=403, detail="System default income types cannot be archived")
+    if model.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Income type not found")
     model.is_archived = True
     db.commit()

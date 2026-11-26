@@ -5,13 +5,17 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, description="Password with minimum 8 characters")
+    password: str = Field(
+        min_length=8,
+        max_length=72,
+        description="Password between 8 and 72 characters",
+    )
     full_name: str | None = Field(default=None, max_length=255)
 
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=72)
 
 
 class UserRead(BaseModel):

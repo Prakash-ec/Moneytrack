@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     # AI call falls back to local Tesseract OCR without blocking the user.
     groq_request_timeout: float = 20.0
 
-    # Keep-alive configuration to prevent container idle sleep on Render Free Tier.
-    keep_alive_enabled: bool = True
+    # Keep-alive disabled by default so serverless PostgreSQL (e.g. Neon) can suspend when idle.
+    keep_alive_enabled: bool = False
     keep_alive_interval_minutes: int = 12
     keep_alive_url: str | None = None
 

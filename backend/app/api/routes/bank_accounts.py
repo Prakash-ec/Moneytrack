@@ -97,7 +97,7 @@ def recalculate(
 @router.post("/{account_id}/report-balance", response_model=BankAccountRead, summary="Record bank reported balance")
 def report_balance(
     account_id: int,
-    reported_balance_paise: int = Query(gt=0),
+    reported_balance_paise: int = Query(ge=0),
     source: str = Query(default="manual"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
